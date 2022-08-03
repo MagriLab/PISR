@@ -1,0 +1,15 @@
+numpy
+torch
+einops
+opt_einsum
+h5py
+pyyaml
+wandb
+tqdm
+matplotlib
+
+git+https://github.com/MagriLab/KolSol@main
+
+mypy==0.931
+pylint
+
