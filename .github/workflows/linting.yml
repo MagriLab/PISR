@@ -33,7 +33,7 @@ jobs:
       - name: Run mypy
         run: |
           yes | mypy ./pisr --install-types || true
-          mypy ./picr
+          mypy ./pisr
       - name: Run pylint
         run: pylint ./pisr
 
