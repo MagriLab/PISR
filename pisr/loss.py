@@ -1,5 +1,3 @@
-from typing import Protocol
-
 import einops
 import opt_einsum as oe
 import torch
@@ -8,7 +6,6 @@ from kolsol.torch.solver import KolSol
 
 from .solver import Solver
 from .utils.checks import ValidateDimension
-from .utils.config import ExperimentConfig
 
 
 class BaseLoss:

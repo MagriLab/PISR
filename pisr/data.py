@@ -8,8 +8,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from ..utils.config import ExperimentConfig
-from ..utils.dataset import UnlabeledTensorDataset
+from utils.config import ExperimentConfig
+from utils.dataset import UnlabeledTensorDataset
 
 
 def load_data(h5_file: Path, config: ExperimentConfig) -> torch.Tensor:

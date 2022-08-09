@@ -10,7 +10,6 @@ from .layers import (
 )
 
 from .utils.checks import ValidateDimension
-from .utils.enums import eDecoder
 
 
 class SuperResolution(nn.Module):

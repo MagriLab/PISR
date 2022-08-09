@@ -25,9 +25,7 @@ class ExperimentConfig:                                                   # pyli
     L2: int = field(init=False)
 
     LAYERS: list = field(init=False)
-    LATENT_DIM: int = field(init=False)
     ACTIVATION: str = field(init=False)
-    DECODER: eDecoder = field(init=False)
     
     # solver parameters
     NK: int = field(init=False)
