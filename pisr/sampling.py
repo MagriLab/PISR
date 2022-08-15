@@ -1,4 +1,3 @@
-import torch
 from .utils.types import TypeTensor
 
 
@@ -21,7 +20,7 @@ def get_low_res_grid(high_res: TypeTensor, factor: int = 3) -> TypeTensor:
     low_res: TypeTensor
         Low-resolution field sampled from high-resolution field.
     """
-    
+
     if factor % 2 == 0:
         raise ValueError('Must provide an odd factor to allow overlapping sensor measurements.')
 
@@ -32,7 +31,7 @@ def get_low_res_grid(high_res: TypeTensor, factor: int = 3) -> TypeTensor:
         raise ValueError('High resolution data and factor do not produce valid low resolution field.')
 
     start_idx = int((factor - 1) / 2)
-    
+
     lr_slice = slice(start_idx, n_high_res, factor)
     low_res = high_res[..., lr_slice, lr_slice]
 

@@ -114,11 +114,8 @@ def initialise_model(config: ExperimentConfig, model_path: Optional[Path] = None
         Initialised model.
     """
 
-    # get activation function
-    activation_fn = getattr(nn, config.ACTIVATION)()
-
     # initialise model
-    model = SuperResolution()
+    model = SuperResolution(upscaling=config.SR_FACTOR)
 
     # load model from file if applicable.
     if model_path:
@@ -171,17 +168,16 @@ def train_loop(model: nn.Module,
     batched_momentum_loss = (0.0 + 0.0j)
     batched_continuity_loss = (0.0 + 0.0j)
     
+    batched_total_loss = (0.0 + 0.0j)
+    
     # l2 loss against actual data
     batched_l2_actual_loss = (0.0 + 0.0j)
 
     model.train(mode=set_train)
     for hi_res in dataloader:
 
-        lo_res = get_low_res_grid(hi_res, factor=factor)
-
-        # move tensors to device
-        lo_res = lo_res.to(DEVICE)
         hi_res = hi_res.to(DEVICE)
+        lo_res = get_low_res_grid(hi_res, factor=factor)
 
         pred_hi_res = model(lo_res)
 
@@ -204,8 +200,19 @@ def train_loop(model: nn.Module,
         l2_actual_loss = torch.sqrt(oe.contract('... -> ', (hi_res - pred_hi_res) ** 2) / oe.contract('... -> ', hi_res ** 2))
 
         # LOSS :: 05 :: Total Loss
-        total_loss = s_lambda * sensor_loss + momentum_loss + loss_fn.constants * continuity_loss
-
+        total_loss = s_lambda * sensor_loss + momentum_loss + loss_fn.constraints * continuity_loss
+        
+        # update batch losses
+        batched_sensor_loss += sensor_loss.item() * hi_res.size(0)
+        batched_l2_sensor_loss += l2_sensor_loss.item() * hi_res.size(0)
+        
+        batched_momentum_loss += momentum_loss.item() * hi_res.size(0)
+        batched_continuity_loss += continuity_loss.item() * hi_res.size(0)
+        
+        batched_total_loss += total_loss.item() * hi_res.size(0)
+        
+        batched_l2_actual_loss += l2_actual_loss.item() * hi_res.size(0)
+        
         # update gradients
         if set_train and optimizer:
             optimizer.zero_grad()
@@ -213,17 +220,19 @@ def train_loop(model: nn.Module,
             optimizer.step()
 
     # normalise and find absolute value
-    batched_sensor_loss /= len(dataloader.dataset)                                                       # type: ignore
-    batched_l2_sensor_loss /= len(dataloader.dataset)                                                    # type: ignore
-    batched_momentum_loss /= len(dataloader.dataset)                                                     # type: ignore
-    batched_continuity_loss /= len(dataloader.dataset)                                                   # type: ignore
-    batched_l2_actual_loss /= len(dataloader.dataset)                                                    # type: ignore
+    batched_sensor_loss = float(abs(batched_sensor_loss)) / len(dataloader.dataset)
+    batched_l2_sensor_loss = float(abs(batched_l2_sensor_loss)) / len(dataloader.dataset)
+    batched_momentum_loss = float(abs(batched_momentum_loss)) / len(dataloader.dataset)
+    batched_continuity_loss = float(abs(batched_continuity_loss)) / len(dataloader.dataset)
+    batched_total_loss = float(abs(batched_total_loss)) / len(dataloader.dataset)
+    batched_l2_actual_loss = float(abs(batched_l2_actual_loss)) / len(dataloader.dataset)
 
     loss_dict: Dict[str, float] = {
         'sensor_loss': batched_sensor_loss,
         'l2_sensor_loss': batched_l2_sensor_loss,
         'momentum_loss': batched_momentum_loss,
         'continuity_loss': batched_continuity_loss,
+        'total_loss': batched_total_loss,
         'l2_actual_loss': batched_l2_actual_loss
     }
 
@@ -277,20 +286,16 @@ def main(args: argparse.Namespace) -> None:
     train_loader: DataLoader = generate_dataloader(train_u, config.BATCH_SIZE, DEVICE_KWARGS)
     validation_loader: DataLoader = generate_dataloader(validation_u, config.BATCH_SIZE, DEVICE_KWARGS)
 
-    # TODO >> Fill this in...
-    loss_fn: KolmogorovLoss()
-
-    # empirical observations suggest this works better without constraints
+    # define loss function -- disable constraints
+    loss_fn = KolmogorovLoss(nk=config.NK, re=config.RE, dt=config.DT, fwt_lb=config.FWT_LB, device=DEVICE)
     loss_fn.constraints = False
 
     # initialise model / optimizer
     model = initialise_model(config, args.model_path)
-    model.to(torch.float)
-
     optimizer = torch.optim.Adam(model.parameters(), lr=config.LR, weight_decay=config.L2)
 
     # generate training functions
-    _loop_params = dict(model=model, loss_fn=loss_fn, simulation_dt=config.DT)
+    _loop_params = dict(model=model, loss_fn=loss_fn, factor=config.SR_FACTOR)
 
     train_fn = ft.partial(train_loop, **_loop_params, dataloader=train_loader, optimizer=optimizer, set_train=True)
     validation_fn = ft.partial(train_loop, **_loop_params, dataloader=validation_loader, set_train=False)
@@ -304,8 +309,12 @@ def main(args: argparse.Namespace) -> None:
 
         # update global validation loss if model improves
         if lt_validation.total_loss < min_validation_loss:
+
+            # TODO >> Since we are not too concerned with overfitting, 
+            #         should we save based on best training loss?
+
             min_validation_loss = lt_validation.total_loss
-            torch.save(model.state_dict(), args.experiment_path / 'autoencoder.pt')
+            torch.save(model.state_dict(), args.experiment_path / 'model.pt')
 
         # log results to weights and biases
         if isinstance(wandb_run, Run):

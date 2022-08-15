@@ -78,9 +78,7 @@ class TimeDistributedWrapper:
 
 
 # defining TimeDistributed layers
-TimeDistributedLinear = TimeDistributedWrapper(nn.Linear)
 TimeDistributedConv2d = TimeDistributedWrapper(nn.Conv2d)
 TimeDistributedConvTranspose2d = TimeDistributedWrapper(nn.ConvTranspose2d)
-TimeDistributedMaxPool2d = TimeDistributedWrapper(nn.MaxPool2d)
 TimeDistributedUpsamplingBilinear2d = TimeDistributedWrapper(nn.UpsamplingBilinear2d)
 
