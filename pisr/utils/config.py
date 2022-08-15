@@ -4,9 +4,6 @@ from typing import Any, Dict, List, Union
 from dataclasses import dataclass, field, fields
 import yaml
 
-from .enums import eDecoder
-from .exceptions import SolverConsistencyError, SolverConsistencyWarning
-
 
 @dataclass
 class ExperimentConfig:                                                   # pylint: disable=too-many-instance-attributes
@@ -24,9 +21,6 @@ class ExperimentConfig:                                                   # pyli
     LR: float = field(init=False)
     L2: int = field(init=False)
 
-    LAYERS: list = field(init=False)
-    ACTIVATION: str = field(init=False)
-    
     # solver parameters
     NK: int = field(init=False)
     DT: float = field(init=False)
@@ -34,6 +28,8 @@ class ExperimentConfig:                                                   # pyli
 
     # resolution parameters
     NX: int = field(init=False)
+    SR_FACTOR: int = field(init=False)
+
     NU: int = field(init=False)
 
     # loss parameters

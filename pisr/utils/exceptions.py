@@ -1,7 +1,5 @@
 from typing import Optional
 
-from .enums import eSolverFunction
-
 
 class DimensionWarning(Warning):
 
@@ -63,38 +61,3 @@ class DimensionError(Exception):
 
         return f'Expected array with ndim={self.expected}, received ndim={self.received}'
 
-
-class SolverConsistencyError(Exception):
-
-    def __init__(self, solver_type: eSolverFunction) -> None:
-
-        super().__init__()
-
-        self.solver_type = solver_type
-
-    def __str__(self) -> str:
-
-        msg = f'You selected a solver type of: {str(self.solver_type)}, '
-
-        if self.solver_type == eSolverFunction.NONLINEAR:
-            msg += 'please ensure C = 0'
-
-        return msg
-
-
-class SolverConsistencyWarning(Warning):
-
-    def __init__(self, solver_type: eSolverFunction) -> None:
-
-        super().__init__()
-
-        self.solver_type = solver_type
-
-    def __str__(self) -> str:
-
-        msg = f'You selected a solver type of: {str(self.solver_type)}, '
-
-        if self.solver_type == eSolverFunction.NONLINEAR:
-            msg += 'please note that C = 0 :: solving diffusion only.'
-
-        return msg
