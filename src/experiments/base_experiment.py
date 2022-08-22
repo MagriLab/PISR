@@ -31,6 +31,9 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
+# determine whether to use CUDNN benchmarks
+CUDNN_BENCHMARKS = True
+
 # machine constants
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 DEVICE_KWARGS = {'num_workers': 1, 'pin_memory': True} if DEVICE == 'cuda' else {}
@@ -176,7 +179,7 @@ def train_loop(model: nn.Module,
     model.train(mode=set_train)
     for hi_res in dataloader:
 
-        hi_res = hi_res.to(DEVICE)
+        hi_res = hi_res.to(DEVICE, non_blocking=True)
         lo_res = get_low_res_grid(hi_res, factor=factor)
 
         pred_hi_res = model(lo_res)
@@ -215,7 +218,7 @@ def train_loop(model: nn.Module,
         
         # update gradients
         if set_train and optimizer:
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             total_loss.backward()
             optimizer.step()
 
@@ -248,6 +251,8 @@ def main(args: argparse.Namespace) -> None:
     args: argparse.Namespace
         Command-line arguments to dictate experiment run.
     """
+
+    torch.backends.cudnn.benchmark = CUDNN_BENCHMARKS
 
     if args.run_gpu is not None and args.run_gpu >= 0 and args.run_gpu < torch.cuda.device_count():
 
@@ -283,8 +288,11 @@ def main(args: argparse.Namespace) -> None:
     u_all: torch.Tensor = load_data(h5_file=args.data_path, config=config).to(torch.float)
     train_u, validation_u = train_validation_split(u_all, config.NTRAIN, config.NVALIDATION, step=config.TIME_STACK)
 
-    train_loader: DataLoader = generate_dataloader(train_u, config.BATCH_SIZE, DEVICE_KWARGS)
-    validation_loader: DataLoader = generate_dataloader(validation_u, config.BATCH_SIZE, DEVICE_KWARGS)
+    # set `drop_last = True` if using: `torch.backends.cudnn.benchmark = True`
+    dataloader_kwargs = dict(shuffle=True, drop_last=CUDNN_BENCHMARKS)
+
+    train_loader = generate_dataloader(train_u, config.BATCH_SIZE, dataloader_kwargs, DEVICE_KWARGS)
+    validation_loader = generate_dataloader(validation_u, config.BATCH_SIZE, dataloader_kwargs, DEVICE_KWARGS)
 
     # define loss function -- disable constraints
     loss_fn = KolmogorovLoss(nk=config.NK, re=config.RE, dt=config.DT, fwt_lb=config.FWT_LB, device=DEVICE)
