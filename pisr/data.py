@@ -124,7 +124,10 @@ def train_validation_split(data: torch.Tensor,
     return d_train, d_validation
 
 
-def generate_dataloader(data: torch.Tensor, batch_size: int, device_kwargs: Dict[str, Any]) -> DataLoader:
+def generate_dataloader(data: torch.Tensor,
+                        batch_size: int,
+                        dataloader_kwargs: Dict[str, Any],
+                        device_kwargs: Dict[str, Any]) -> DataLoader:
 
     """Generate DataLoader from given data.
 
@@ -134,6 +137,8 @@ def generate_dataloader(data: torch.Tensor, batch_size: int, device_kwargs: Dict
         Data to generate DataLoader from.
     batch_size: int
         Number of items per batch.
+    dataloader_kwargs: Dict[str, Any]
+        Kwargs for the dataloader.
     device_kwargs: Dict[str, Any]
         Kwargs for the device.
 
@@ -144,7 +149,7 @@ def generate_dataloader(data: torch.Tensor, batch_size: int, device_kwargs: Dict
     """
 
     dataset = UnlabeledTensorDataset(data)
-    dataloader = DataLoader(dataset, batch_size=batch_size, **device_kwargs)
+    dataloader = DataLoader(dataset, batch_size=batch_size, **dataloader_kwargs, **device_kwargs)
 
     return dataloader
 
