@@ -3,11 +3,11 @@ import csv
 import functools as ft
 
 import sys
+import contextlib
 from pathlib import Path
 from shutil import copyfile
-from typing import Callable, Dict, NamedTuple, Optional, Union
+from typing import ContextManager, Dict, NamedTuple, Optional, Union
 
-import einops
 import numpy as np
 import opt_einsum as oe
 import torch
@@ -31,8 +31,10 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-# determine whether to use CUDNN benchmarks
+NULL_CONTEXT = contextlib.nullcontext()
+
 CUDNN_BENCHMARKS = True
+MIXED_PRECISION = True
 
 # machine constants
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -130,12 +132,41 @@ def initialise_model(config: ExperimentConfig, model_path: Optional[Path] = None
     return model
 
 
+def get_context(grad_scaler: Optional[torch.cuda.amp.GradScaler] = None) -> ContextManager:
+
+    """Provide context for mixed precision training.
+
+    Parameters:
+    ===========
+    grad_scaler: Optional[torch.cuda.amp.GradScaler]
+        GradScaler to be used if training with mixed precision.
+
+    Returns:
+    ========
+    ContextManager
+        Context manager to use: torch.cuda.amp.autocast() or contextlib.nullcontext()
+    """
+
+    if grad_scaler and not MIXED_PRECISION:
+        raise ValueError('Cannot use GradScaler without MIXED PRECISION.')
+
+    if not MIXED_PRECISION:
+        return NULL_CONTEXT
+
+    if grad_scaler:
+        return torch.cuda.amp.autocast()
+
+    return NULL_CONTEXT
+
+
+
 def train_loop(model: nn.Module,
                dataloader: DataLoader,
                factor: int,
                loss_fn: KolmogorovLoss,
                optimizer: Optional[torch.optim.Optimizer] = None,
                s_lambda: float = 1e3,
+               grad_scaler: Optional[torch.cuda.amp.GradScaler] = None,
                set_train: bool = False) -> LossTracker:
 
     """Run a single training / evaluation loop.
@@ -154,13 +185,15 @@ def train_loop(model: nn.Module,
         Optimiser used to update the weights of the model, when applicable.
     s_lambda: float
         Scaling parameter for the loss.
+    grad_scaler: Optional[torch.cuda.amp.GradScaler]
+        GradScaler to use for mixed precision training if applicable.
     set_train: bool
         Determine whether run in training / evaluation mode.
 
     Returns
     -------
     LossTracker
-        Loss tracking object to hold information about the training progress.    
+        Loss tracking object to hold information about the training progress.
     """
 
     # data-driven loss
@@ -170,11 +203,12 @@ def train_loop(model: nn.Module,
     # physics-based loss
     batched_momentum_loss = (0.0 + 0.0j)
     batched_continuity_loss = (0.0 + 0.0j)
-    
+
     batched_total_loss = (0.0 + 0.0j)
-    
+
     # l2 loss against actual data
     batched_l2_actual_loss = (0.0 + 0.0j)
+
 
     model.train(mode=set_train)
     for hi_res in dataloader:
@@ -182,53 +216,63 @@ def train_loop(model: nn.Module,
         hi_res = hi_res.to(DEVICE, non_blocking=True)
         lo_res = get_low_res_grid(hi_res, factor=factor)
 
-        pred_hi_res = model(lo_res)
+        # use `torch.cuda.amp.autocast()` if MIXED_PRECISION
+        with get_context(grad_scaler):
 
-        # LOSS :: 01 :: Sensor Locations
-        pred_sensor_measurements = get_low_res_grid(pred_hi_res, factor=factor)
-        mag_sensor_err = oe.contract('... -> ', (pred_sensor_measurements - lo_res) ** 2) 
+            pred_hi_res = model(lo_res)
 
-        sensor_loss = mag_sensor_err / lo_res.numel()
-        l2_sensor_loss = torch.sqrt(mag_sensor_err / oe.contract('... -> ', lo_res ** 2))
+            # LOSS :: 01 :: Sensor Locations
+            pred_sensor_measurements = get_low_res_grid(pred_hi_res, factor=factor)
+            mag_sensor_err = oe.contract('... -> ', (pred_sensor_measurements - lo_res) ** 2)
 
-        # LOSS :: 02 :: Momentum Loss
-        momentum_loss = loss_fn.calc_residual_loss(pred_hi_res)
+            sensor_loss = mag_sensor_err / lo_res.numel()
+            l2_sensor_loss = torch.sqrt(mag_sensor_err / oe.contract('... -> ', lo_res ** 2))
 
-        # LOSS :: 03 :: Continuity Loss
-        continuity_loss = torch.zeros_like(momentum_loss)
-        if loss_fn.constraints:
-            continuity_loss = loss_fn.calc_constraint_loss(pred_hi_res)
+            # LOSS :: 02 :: Momentum Loss
+            momentum_loss = loss_fn.calc_residual_loss(pred_hi_res)
 
-        # LOSS :: 04 :: Actual Loss
-        l2_actual_loss = torch.sqrt(oe.contract('... -> ', (hi_res - pred_hi_res) ** 2) / oe.contract('... -> ', hi_res ** 2))
+            # LOSS :: 03 :: Continuity Loss
+            continuity_loss = torch.zeros_like(momentum_loss)
+            if loss_fn.constraints:
+                continuity_loss = loss_fn.calc_constraint_loss(pred_hi_res)
 
-        # LOSS :: 05 :: Total Loss
-        total_loss = s_lambda * sensor_loss + momentum_loss + loss_fn.constraints * continuity_loss
-        
+            # LOSS :: 04 :: Actual Loss
+            l2_actual_loss = torch.sqrt(oe.contract('... -> ', (hi_res - pred_hi_res) ** 2) / oe.contract('... -> ', hi_res ** 2))
+
+            # LOSS :: 05 :: Total Loss
+            total_loss = s_lambda * sensor_loss + momentum_loss + loss_fn.constraints * continuity_loss
+
         # update batch losses
         batched_sensor_loss += sensor_loss.item() * hi_res.size(0)
         batched_l2_sensor_loss += l2_sensor_loss.item() * hi_res.size(0)
-        
+
         batched_momentum_loss += momentum_loss.item() * hi_res.size(0)
         batched_continuity_loss += continuity_loss.item() * hi_res.size(0)
-        
+
         batched_total_loss += total_loss.item() * hi_res.size(0)
-        
+
         batched_l2_actual_loss += l2_actual_loss.item() * hi_res.size(0)
-        
+
         # update gradients
         if set_train and optimizer:
+
             optimizer.zero_grad(set_to_none=True)
-            total_loss.backward()
-            optimizer.step()
+
+            if grad_scaler:
+                grad_scaler.scale(total_loss).backward()
+                grad_scaler.step(optimizer)
+                grad_scaler.update()
+            else:
+                total_loss.backward()
+                optimizer.step()
 
     # normalise and find absolute value
-    batched_sensor_loss = float(abs(batched_sensor_loss)) / len(dataloader.dataset)
-    batched_l2_sensor_loss = float(abs(batched_l2_sensor_loss)) / len(dataloader.dataset)
-    batched_momentum_loss = float(abs(batched_momentum_loss)) / len(dataloader.dataset)
-    batched_continuity_loss = float(abs(batched_continuity_loss)) / len(dataloader.dataset)
-    batched_total_loss = float(abs(batched_total_loss)) / len(dataloader.dataset)
-    batched_l2_actual_loss = float(abs(batched_l2_actual_loss)) / len(dataloader.dataset)
+    batched_sensor_loss = float(abs(batched_sensor_loss)) / len(dataloader.dataset)                      # type: ignore
+    batched_l2_sensor_loss = float(abs(batched_l2_sensor_loss)) / len(dataloader.dataset)                # type: ignore
+    batched_momentum_loss = float(abs(batched_momentum_loss)) / len(dataloader.dataset)                  # type: ignore
+    batched_continuity_loss = float(abs(batched_continuity_loss)) / len(dataloader.dataset)              # type: ignore
+    batched_total_loss = float(abs(batched_total_loss)) / len(dataloader.dataset)                        # type: ignore
+    batched_l2_actual_loss = float(abs(batched_l2_actual_loss)) / len(dataloader.dataset)                # type: ignore
 
     loss_dict: Dict[str, float] = {
         'sensor_loss': batched_sensor_loss,
@@ -302,10 +346,15 @@ def main(args: argparse.Namespace) -> None:
     model = initialise_model(config, args.model_path)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.LR, weight_decay=config.L2)
 
+    # grad scaler for mixed precision training
+    scaler: Optional[torch.cuda.amp.GradScaler] = None
+    if MIXED_PRECISION:
+        scaler = torch.cuda.amp.GradScaler()
+
     # generate training functions
     _loop_params = dict(model=model, loss_fn=loss_fn, factor=config.SR_FACTOR)
 
-    train_fn = ft.partial(train_loop, **_loop_params, dataloader=train_loader, optimizer=optimizer, set_train=True)
+    train_fn = ft.partial(train_loop, **_loop_params, dataloader=train_loader, optimizer=optimizer, grad_scaler=scaler, set_train=True)
     validation_fn = ft.partial(train_loop, **_loop_params, dataloader=validation_loader, set_train=False)
 
     # main training loop
@@ -318,7 +367,7 @@ def main(args: argparse.Namespace) -> None:
         # update global validation loss if model improves
         if lt_validation.total_loss < min_validation_loss:
 
-            # TODO >> Since we are not too concerned with overfitting, 
+            # TODO >> Since we are not too concerned with overfitting,
             #         should we save based on best training loss?
 
             min_validation_loss = lt_validation.total_loss
