@@ -1,12 +1,17 @@
 import functools as ft
 import itertools as it
-from typing import Any, Callable, ParamSpec, TypeVar
+from typing import Any, Callable, ParamSpec, TypeAlias, TypeVar
+
+import torch
+import numpy as np
 
 from .exceptions import DimensionError, DimensionWarning
-from .types import TypeTensor
+
 
 P = ParamSpec('P')
 T = TypeVar('T')
+
+TypeTensor: TypeAlias = np.ndarray | torch.Tensor
 
 
 class ValidateDimension:
