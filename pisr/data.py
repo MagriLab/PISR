@@ -1,6 +1,6 @@
 import operator
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import einops
 import h5py
@@ -91,7 +91,7 @@ def generate_random_idx(data: torch.Tensor, n_points: int, step: int) -> np.ndar
 def train_validation_split(data: torch.Tensor,
                            n_train: int,
                            n_validation: int,
-                           step: int) -> Tuple[torch.Tensor, torch.Tensor]:
+                           step: int) -> tuple[torch.Tensor, torch.Tensor]:
 
     """Create train / validation split from given data.
 
@@ -126,8 +126,8 @@ def train_validation_split(data: torch.Tensor,
 
 def generate_dataloader(data: torch.Tensor,
                         batch_size: int,
-                        dataloader_kwargs: Dict[str, Any],
-                        device_kwargs: Dict[str, Any]) -> DataLoader:
+                        dataloader_kwargs: dict[str, Any],
+                        device_kwargs: dict[str, Any]) -> DataLoader:
 
     """Generate DataLoader from given data.
 
@@ -137,9 +137,9 @@ def generate_dataloader(data: torch.Tensor,
         Data to generate DataLoader from.
     batch_size: int
         Number of items per batch.
-    dataloader_kwargs: Dict[str, Any]
+    dataloader_kwargs: dict[str, Any]
         Kwargs for the dataloader.
-    device_kwargs: Dict[str, Any]
+    device_kwargs: dict[str, Any]
         Kwargs for the device.
 
     Returns

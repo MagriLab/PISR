@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from dataclasses import dataclass, asdict, field, fields
 
@@ -13,7 +13,7 @@ class LossTracker:
     total_loss: float = field(default=-1.0)
     l2_actual_loss: float = field(default=-1.0)
 
-    def get_dict(self, training: Optional[bool] = None) -> Dict[str, Any]:
+    def get_dict(self, training: Optional[bool] = None) -> dict[str, Any]:
 
         """Get loss dictionary.
 
@@ -24,13 +24,13 @@ class LossTracker:
 
         Returns
         -------
-        Dict[str, float]
-            Dictionary representing the results.
+        dict[str, float]
+            dictionary representing the results.
         """
 
         return {f'{self._prepend_str(k, training)}': v for k, v in asdict(self).items()}
 
-    def get_fields(self, training: Optional[bool] = None) -> List[str]:
+    def get_fields(self, training: Optional[bool] = None) -> list[str]:
 
         """Get field names.
 
@@ -41,20 +41,20 @@ class LossTracker:
 
         Returns
         -------
-        List[str]
+        list[str]
             List of the field names defined above.
         """
 
         return list(map(lambda x: self._prepend_str(x.name, training), filter(lambda x: x.repr, fields(self))))
 
     @property
-    def get_loss_keys(self) -> List[float]:
+    def get_loss_keys(self) -> list[float]:
 
         """Get loss values.
 
         Returns
         -------
-        List[float]
+        list[float]
             List of the loss values corresponding to the fields above.
         """
 
