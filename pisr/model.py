@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 from torch import nn
@@ -15,7 +15,7 @@ class ConvBlock(nn.Module):
                  input_filters: int,
                  middle_filters: int,
                  output_filters: int,
-                 kernel_size: Tuple[int, int] = (3, 3)) -> None:
+                 kernel_size: tuple[int, int] = (3, 3)) -> None:
 
         """Convolutional block with residual connection.
 
@@ -27,7 +27,7 @@ class ConvBlock(nn.Module):
             Number of filters to use for the central convolutional layer.
         output_filters: int
             Number of filters to use for the output convolutional layer.
-        kernel_size: Tuple[int, int]
+        kernel_size: tuple[int, int]
             Kernel size to use for the convolutional layers.
         """
 
@@ -62,7 +62,7 @@ class ConvBlock(nn.Module):
         self.activation = nn.Tanh()
 
     @staticmethod
-    def _get_identity_mapping(input_filters: int, output_filters: int, kernel_size: Tuple[int, int]) -> Optional[nn.Module]:
+    def _get_identity_mapping(input_filters: int, output_filters: int, kernel_size: tuple[int, int]) -> Optional[nn.Module]:
 
         """Produce relevant mapping for residual connection.
 
@@ -72,7 +72,7 @@ class ConvBlock(nn.Module):
             Depth of the input tensor.
         output_filters: int
             Number of filters to use for the output convolutional layer.
-        kernel_size: Tuple[int, int]
+        kernel_size: tuple[int, int]
             Kernel size to use for the convolutional layers.
 
         Returns:

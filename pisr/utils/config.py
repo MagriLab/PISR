@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Union
 
 from dataclasses import dataclass, field, fields
 import yaml
@@ -8,7 +8,7 @@ import yaml
 @dataclass
 class ExperimentConfig:                                                   # pylint: disable=too-many-instance-attributes
 
-    _config: Dict[str, Any] = field(default_factory=dict, repr=False)
+    _config: dict[str, Any] = field(default_factory=dict, repr=False)
 
     # data parameters
     NTRAIN: int = field(init=False)
@@ -76,13 +76,13 @@ class ExperimentConfig:                                                   # pyli
 
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
 
         """Returns the config dictionary.
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Config dictionary.
         """
 
