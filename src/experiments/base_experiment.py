@@ -18,7 +18,7 @@ from wandb.sdk.lib import RunDisabled
 from wandb.wandb_run import Run
 
 sys.path.append('../..')
-from pisr.model import SuperResolution
+from pisr.model import BlockSRCNN
 from pisr.loss import KolmogorovLoss
 from pisr.sampling import get_low_res_grid
 
@@ -28,13 +28,13 @@ from pisr.utils.config import ExperimentConfig
 from pisr.utils.loss_tracker import LossTracker
 
 import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings('ignore', category=UserWarning)
 
 
 NULL_CONTEXT = contextlib.nullcontext()
 
 CUDNN_BENCHMARKS = True
-MIXED_PRECISION = True
+MIXED_PRECISION = False # currently not supported for complex operations
 
 # machine constants
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -119,8 +119,13 @@ def initialise_model(config: ExperimentConfig, model_path: Optional[Path] = None
         Initialised model.
     """
 
+    if not config.NX % config.SR_FACTOR == 0:
+        raise ValueError(f'Incompatible {config.NX=} and {config.SR_FACTOR=}')
+
+    lr_nx = int(config.NX / config.SR_FACTOR)
+
     # initialise model
-    model = SuperResolution(upscaling=config.SR_FACTOR)
+    model = BlockSRCNN(lr_nx=lr_nx, upscaling=config.SR_FACTOR, mode='bicubic')
 
     # load model from file if applicable.
     if model_path:
@@ -157,7 +162,6 @@ def get_context(grad_scaler: Optional[torch.cuda.amp.GradScaler] = None) -> Cont
         return torch.cuda.amp.autocast()
 
     return NULL_CONTEXT
-
 
 
 def train_loop(model: nn.Module,
