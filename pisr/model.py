@@ -4,8 +4,6 @@ import torch
 from torch import nn
 
 from .layers import TimeDistributedConv2d, TimeDistributedConvTranspose2d, TimeDistributedUpsample
-
-
 from .utils.checks import ValidateDimension
 
 
@@ -180,7 +178,7 @@ class SRCNN(nn.Module):
         torch.Tensor
             Output of the model.
         """
-        
+
         x = self.upsample(x)
 
         x = self.activation(self.conv1(x))
@@ -231,9 +229,9 @@ class BlockSRCNN(nn.Module):
         self.conv1 = TimeDistributedConv2d(2, 64, kernel_size=(9, 9), **self._conv_kwargs)
         self.conv2 = TimeDistributedConv2d(64, 32, kernel_size=(5, 5), **self._conv_kwargs)
 
-        self.conv3 = ConvBlock(32, 32, 32, last_activation=True)
-        self.conv4 = ConvBlock(32, 32, 32, last_activation=True)
-        self.conv5 = ConvBlock(32, 32, 32, last_activation=True)
+        self.conv3 = ConvBlock(32, 32, 32)
+        self.conv4 = ConvBlock(32, 32, 32)
+        self.conv5 = ConvBlock(32, 32, 32)
 
         self.conv6 = TimeDistributedConv2d(32, 2, kernel_size=(3, 3), **self._conv_kwargs)
 
@@ -252,17 +250,16 @@ class BlockSRCNN(nn.Module):
         torch.Tensor
             Output of the model.
         """
-        
+
         x = self.upsample(x)
 
         x = self.activation(self.conv1(x))
         x = self.activation(self.conv2(x))
 
-        x = self.conv3(x)
-        x = self.conv4(x)
-        x = self.conv5(x)
+        x = self.conv3(x, last_activation=True)
+        x = self.conv4(x, last_activation=True)
+        x = self.conv5(x, last_activation=True)
 
         x = self.conv6(x)
 
         return x
-

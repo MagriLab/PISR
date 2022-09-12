@@ -1,7 +1,7 @@
 from typing import TypeVar
 
-import torch
 import numpy as np
+import torch
 
 
 T = TypeVar('T', np.ndarray, torch.Tensor)
@@ -45,4 +45,3 @@ def get_low_res_grid(high_res: T, factor: int = 3) -> T:
         raise ValueError('Unable to produce low resolution field.')
 
     return low_res
-

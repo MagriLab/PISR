@@ -12,4 +12,3 @@ git+https://github.com/MagriLab/KolSol@main
 
 mypy==0.931
 pylint
-

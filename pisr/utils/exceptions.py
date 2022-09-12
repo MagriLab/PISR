@@ -60,4 +60,3 @@ class DimensionError(Exception):
             return 'Expected / Received are identical, please check logic...'
 
         return f'Expected array with ndim={self.expected}, received ndim={self.received}'
-

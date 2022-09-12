@@ -2,8 +2,8 @@ import functools as ft
 import itertools as it
 from typing import Any, Callable, ParamSpec, TypeAlias, TypeVar
 
-import torch
 import numpy as np
+import torch
 
 from .exceptions import DimensionError, DimensionWarning
 

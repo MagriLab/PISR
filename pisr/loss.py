@@ -1,7 +1,6 @@
 import einops
 import opt_einsum as oe
 import torch
-
 from kolsol.torch.solver import KolSol
 
 from .solver import Solver
@@ -197,4 +196,3 @@ class KolmogorovLoss(BaseLoss):
         loss = oe.contract('... -> ', constraint_u * torch.conj(constraint_u)) / constraint_u.numel()
 
         return loss
-

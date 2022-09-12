@@ -152,4 +152,3 @@ def generate_dataloader(data: torch.Tensor,
     dataloader = DataLoader(dataset, batch_size=batch_size, **dataloader_kwargs, **device_kwargs)
 
     return dataloader
-
