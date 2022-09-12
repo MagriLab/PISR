@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 from torch import nn
 
-from .layers import TimeDistributedConv2d, TimeDistributedConvTranspose2d
+from .layers import TimeDistributedConv2d, TimeDistributedConvTranspose2d, TimeDistributedUpsample
 
 
 from .utils.checks import ValidateDimension
@@ -59,7 +59,7 @@ class ConvBlock(nn.Module):
 
         self.identity_mapping = self._get_identity_mapping(input_filters, output_filters, kernel_size)
 
-        self.activation = nn.Tanh()
+        self.activation = nn.ReLU(inplace=True)
 
     @staticmethod
     def _get_identity_mapping(input_filters: int, output_filters: int, kernel_size: tuple[int, int]) -> Optional[nn.Module]:
@@ -124,18 +124,20 @@ class ConvBlock(nn.Module):
         return out
 
 
-class SuperResolution(nn.Module):
+class SRCNN(nn.Module):
 
-    def __init__(self, upscaling: int = 3) -> None:
+    def __init__(self, lr_nx: int, upscaling: int = 9, mode: str = 'bicubic') -> None:
 
-        """Super Resolution model.
-
-        Note :: This is currently hardcoded - needs to be made configurable.
+        """SRCNN: Standard CNN for Super-Resolution.
 
         Parameters:
         ===========
+        lr_nx: int
+            Low-resolution grid-points.
         upscaling: int
-            Factor by which to upscale the input tensor.
+            Upsampling factor for the network.
+        mode: str
+            Mode of upsampling for the first layer of the network.
         """
 
         super().__init__()
@@ -143,21 +145,25 @@ class SuperResolution(nn.Module):
         if upscaling % 2 == 0:
             raise ValueError('Must provide an odd upscaling value...')
 
+        if mode not in ['bilinear', 'bicubic']:
+            raise ValueError('Choose relevant mode for upsampling...')
+
         self.upscaling = upscaling
+        self.mode = mode
 
-        self.cb1 = ConvBlock(2, 8, 16)
-        self.cb2 = ConvBlock(16, 32, 64)
+        self.lr_nx = lr_nx
+        self.hr_nx = self.lr_nx * self.upscaling
 
-        self.conv_transpose = TimeDistributedConvTranspose2d(
-            in_channels=64,
-            out_channels=64,
-            kernel_size=(self.upscaling, self.upscaling),
-            stride=(self.upscaling, self.upscaling),
-            padding=0
-        )
+        self._conv_kwargs = dict(padding='same', padding_mode='circular')
 
-        self.cb3 = ConvBlock(64, 32, 16)
-        self.cb4 = ConvBlock(16, 8, 2)
+        # define layers
+        self.activation = nn.ReLU(inplace=True)
+
+        self.upsample = TimeDistributedUpsample((self.hr_nx, self.hr_nx), mode=self.mode)
+
+        self.conv1 = TimeDistributedConv2d(2, 64, kernel_size=(9, 9), **self._conv_kwargs)
+        self.conv2 = TimeDistributedConv2d(64, 32, kernel_size=(5, 5), **self._conv_kwargs)
+        self.conv3 = TimeDistributedConv2d(32, 2, kernel_size=(5, 5), **self._conv_kwargs)
 
     @ValidateDimension(ndim=5)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -174,15 +180,89 @@ class SuperResolution(nn.Module):
         torch.Tensor
             Output of the model.
         """
+        
+        x = self.upsample(x)
+
+        x = self.activation(self.conv1(x))
+        x = self.activation(self.conv2(x))
+
+        x = self.conv3(x)
+
+        return x
 
 
-        x = self.cb1(x)
-        x = self.cb2(x)
+class BlockSRCNN(nn.Module):
 
-        x = self.conv_transpose(x)
+    def __init__(self, lr_nx: int, upscaling: int = 9, mode: str = 'bicubic') -> None:
 
-        x = self.cb3(x)
-        x = self.cb4(x, last_activation=False)
+        """BlockSRCNN: SRCNN with additional conv blocks.
+
+        Parameters:
+        ===========
+        lr_nx: int
+            Low-resolution grid-points.
+        upscaling: int
+            Upsampling factor for the network.
+        mode: str
+            Mode of upsampling for the first layer of the network.
+        """
+
+        super().__init__()
+
+        if upscaling % 2 == 0:
+            raise ValueError('Must provide an odd upscaling value...')
+
+        if mode not in ['bilinear', 'bicubic']:
+            raise ValueError('Choose relevant mode for upsampling...')
+
+        self.upscaling = upscaling
+        self.mode = mode
+
+        self.lr_nx = lr_nx
+        self.hr_nx = self.lr_nx * self.upscaling
+
+        self._conv_kwargs = dict(padding='same', padding_mode='circular')
+
+        # define layers
+        self.activation = nn.ReLU(inplace=True)
+
+        self.upsample = TimeDistributedUpsample((self.hr_nx, self.hr_nx), mode=self.mode)
+
+        self.conv1 = TimeDistributedConv2d(2, 64, kernel_size=(9, 9), **self._conv_kwargs)
+        self.conv2 = TimeDistributedConv2d(64, 32, kernel_size=(5, 5), **self._conv_kwargs)
+
+        self.conv3 = ConvBlock(32, 32, 32, last_activation=True)
+        self.conv4 = ConvBlock(32, 32, 32, last_activation=True)
+        self.conv5 = ConvBlock(32, 32, 32, last_activation=True)
+
+        self.conv6 = TimeDistributedConv2d(32, 2, kernel_size=(3, 3), **self._conv_kwargs)
+
+    @ValidateDimension(ndim=5)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
+        """Forward pass through the model.
+
+        Parameters:
+        ===========
+        x: torch.Tensor
+            Tensor to pass through the model.
+
+        Returns:
+        ========
+        torch.Tensor
+            Output of the model.
+        """
+        
+        x = self.upsample(x)
+
+        x = self.activation(self.conv1(x))
+        x = self.activation(self.conv2(x))
+
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+
+        x = self.conv6(x)
 
         return x
 
