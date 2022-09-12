@@ -22,4 +22,3 @@ class UnlabeledTensorDataset(TensorDataset):
 
     def __len__(self) -> int:
         return len(self.data_tensor)
-

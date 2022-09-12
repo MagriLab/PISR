@@ -1,7 +1,8 @@
 from typing import Optional, Protocol, TypeVar
 
-import torch
 import numpy as np
+import torch
+
 
 T = TypeVar('T', np.ndarray, torch.Tensor)
 
@@ -22,4 +23,3 @@ class Solver(Protocol[T]):
 
     def fourier_to_phys(self, t_hat: T, nref: Optional[int]) -> T:
         """fourier_to_phys"""
-
