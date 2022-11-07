@@ -8,7 +8,7 @@ wandb
 tqdm
 matplotlib
 
-git+https://github.com/MagriLab/KolSol@main
+kolsol==1.0.1
 
 mypy==0.931
 pylint
