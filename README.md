@@ -23,6 +23,7 @@ All code to reproduce experiments can be found in the `./src` folder:
 
 1. Generate data using `./src/data/generate_kolmogorov.py`
 2. Train model using `./src/experiments/base_experiment.py`
+3. Run post-processing using `./src/postprocessing/generate_plot.py`
 
 Defaults have been set to the same as used in the paper.
 
