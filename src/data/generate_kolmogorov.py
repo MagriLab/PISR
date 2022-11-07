@@ -123,17 +123,17 @@ if __name__ == '__main__':
 
     # arguments to define output
     parser.add_argument('--data-path', type=Path, required=True)
-    parser.add_argument('--resolution', type=int, required=True)
+    parser.add_argument('--resolution', type=int, default=150)
 
     # arguments to define simulation
-    parser.add_argument('--re', type=float, required=True)
-    parser.add_argument('--dt', type=float, default=0.01)
+    parser.add_argument('--re', type=float, default=34.0)
+    parser.add_argument('--dt', type=float, default=0.005)
 
-    parser.add_argument('--time-simulation', type=float, required=True)
+    parser.add_argument('--time-simulation', type=float, default=60.0)
     parser.add_argument('--time-transient', type=float, default=180.0)
 
     # arguments for Kolmogorov flow
-    parser.add_argument('--nk', type=int, default=8)
+    parser.add_argument('--nk', type=int, default=30)
     parser.add_argument('--ndim', type=int, default=2)
 
     parsed_args = parser.parse_args()
