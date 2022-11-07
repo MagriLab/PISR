@@ -385,7 +385,7 @@ def generate_plot(upsampled_fields: UpsampledResults, energy_spectrums: Upsample
     plt.subplots_adjust(wspace=0.0, hspace=0.3)
     fig.savefig(plot_path, dpi=1000, bbox_inches='tight')
 
-    fig.close()
+    plt.close(fig)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -407,7 +407,7 @@ def main(args: argparse.Namespace) -> None:
     loss_fn.constraints = False
 
     # load trained model
-    model = initialise_model(lr_nx, config.SR_FACTOR, model_path=args.model_path)
+    model = initialise_model(lr_nx, config.SR_FACTOR, model_path=model_path)
 
     # upsample fields and generate energy spectrums
     upsampled_fields = get_upsampled(model, u_data, factor=config.SR_FACTOR)
