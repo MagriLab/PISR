@@ -22,7 +22,7 @@ import warnings
 
 from pisr.data import generate_dataloader, load_data, train_validation_split
 from pisr.loss import KolmogorovLoss
-from pisr.model import BlockSRCNN
+from pisr.model import SRCNN
 from pisr.sampling import get_low_res_grid
 from pisr.utils.config import ExperimentConfig
 from pisr.utils.loss_tracker import LossTracker
@@ -125,7 +125,7 @@ def initialise_model(config: ExperimentConfig, model_path: Optional[Path] = None
     lr_nx = int(config.NX / config.SR_FACTOR)
 
     # initialise model
-    model = BlockSRCNN(lr_nx=lr_nx, upscaling=config.SR_FACTOR, mode='bicubic')
+    model = SRCNN(lr_nx=lr_nx, upscaling=config.SR_FACTOR, mode='bicubic')
 
     # load model from file if applicable.
     if model_path:
@@ -169,7 +169,7 @@ def train_loop(model: nn.Module,
                factor: int,
                loss_fn: KolmogorovLoss,
                optimizer: Optional[torch.optim.Optimizer] = None,
-               s_lambda: float = 1e3,
+               s_lambda: float = 1e6,
                grad_scaler: Optional[torch.cuda.amp.GradScaler] = None,
                set_train: bool = False) -> LossTracker:
 
@@ -370,10 +370,6 @@ def main(args: argparse.Namespace) -> None:
 
         # update global validation loss if model improves
         if lt_validation.total_loss < min_validation_loss:
-
-            # TODO >> Since we are not too concerned with overfitting,
-            #         should we save based on best training loss?
-
             min_validation_loss = lt_validation.total_loss
             torch.save(model.state_dict(), args.experiment_path / 'model.pt')
 
