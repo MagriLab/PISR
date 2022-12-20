@@ -4,15 +4,16 @@ from typing import Any
 
 import einops
 import h5py
+import ml_collections
 import numpy as np
 import torch
+from kolsol.numpy.solver import KolSol
 from torch.utils.data import DataLoader
 
-from .utils.config import ExperimentConfig
 from .utils.dataset import UnlabeledTensorDataset
 
 
-def load_data(h5_file: Path, config: ExperimentConfig) -> torch.Tensor:
+def load_data(h5_file: Path, config: ml_collections.ConfigDict) -> torch.Tensor:
 
     """Loads simulation data as torch.Tensor.
 
@@ -20,7 +21,7 @@ def load_data(h5_file: Path, config: ExperimentConfig) -> torch.Tensor:
     ----------
     h5_file: Path
         Path to the .h5 file containing simulation data.
-    config: ExperimentConfig
+    config: ml_collections.ConfigDict
         Configuration object holding key information about simulation.
 
     Returns
@@ -30,22 +31,16 @@ def load_data(h5_file: Path, config: ExperimentConfig) -> torch.Tensor:
     """
 
     with h5py.File(h5_file, 'r') as hf:
+        u_all_hat = np.array(hf.get('velocity_field_hat'))
 
-        # check configuration matches given simulation file
-        config_mismatch = []
-        for x, config_x in zip(['re', 'nk', 'dt', 'resolution', 'ndim'], [config.RE, config.NK, config.DT, config.NX, config.NU]):
-            if np.array(hf.get(x)) != np.array(config_x):
-                config_mismatch.append(x)
+    ks = KolSol(nk=config.SIMULATION.NK, nf=4, re=config.SIMULATION.RE, ndim=2)
 
-        if config_mismatch:
-            raise ValueError(f'Configuration does not match simulation: {config_mismatch}')
-
-        # load data from h5 file
-        u_all = np.array(hf.get('velocity_field'))
+    nx_hr = int(config.EXPERIMENT.NX_LR * config.EXPERIMENT.SR_FACTOR)
+    u_all = ks.fourier_to_phys(u_all_hat, nref=nx_hr)
 
     # stack N consecutive time-steps in a new dimension
     list_u = []
-    for i, j in zip(range(config.TIME_STACK), map(operator.neg, reversed(range(config.TIME_STACK)))):
+    for i, j in zip(range(config.DATA.TAU), map(operator.neg, reversed(range(config.DATA.TAU)))):
         sl = slice(i, j) if j < 0 else slice(i, None)
         list_u.append(u_all[sl])
 
