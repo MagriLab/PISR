@@ -33,14 +33,14 @@ def load_data(h5_file: Path, config: ml_collections.ConfigDict) -> torch.Tensor:
     with h5py.File(h5_file, 'r') as hf:
         u_all_hat = np.array(hf.get('velocity_field_hat'))
 
-    ks = KolSol(nk=config.SIMULATION.NK, nf=4, re=config.SIMULATION.RE, ndim=2)
+    ks = KolSol(nk=config.simulation.nk, nf=4, re=config.simulation.re, ndim=2)
 
-    nx_hr = int(config.EXPERIMENT.NX_LR * config.EXPERIMENT.SR_FACTOR)
+    nx_hr = int(config.experiment.nx_lr * config.experiment.sr_factor)
     u_all = ks.fourier_to_phys(u_all_hat, nref=nx_hr)
 
     # stack N consecutive time-steps in a new dimension
     list_u = []
-    for i, j in zip(range(config.DATA.TAU), map(operator.neg, reversed(range(config.DATA.TAU)))):
+    for i, j in zip(range(config.data.tau), map(operator.neg, reversed(range(config.data.tau)))):
         sl = slice(i, j) if j < 0 else slice(i, None)
         list_u.append(u_all[sl])
 
