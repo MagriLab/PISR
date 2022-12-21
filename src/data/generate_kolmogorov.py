@@ -1,6 +1,3 @@
-import argparse
-import sys
-from pathlib import Path
 from typing import Any, Dict
 
 import h5py
@@ -9,10 +6,7 @@ import tqdm
 from absl import app, flags
 from kolsol.numpy.solver import KolSol
 
-
-sys.path.append('../..')
-
-from pisr.experimental import define_path as pisr_flags
+from ..pisr.experimental import define_path as pisr_flags
 
 
 FLAGS = flags.FLAGS
@@ -52,6 +46,8 @@ _NK = flags.DEFINE_integer(
     30,
     'Number of symmetric wavenumbers to solve with.'
 )
+
+flags.mark_flags_as_required(['data_path'])
 
 
 NF: float = 4.0

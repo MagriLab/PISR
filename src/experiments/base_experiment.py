@@ -3,16 +3,12 @@
 ## Weights and Biases
 - Better checks for whether to log.
 - Force online / offline syncing.
-- Tag management.
 - Log images of results.
-
-## Writing FLAGS to file.
-
 """
 
 import csv
 import functools as ft
-import sys
+import warnings
 from pathlib import Path
 from typing import Optional
 
@@ -27,27 +23,21 @@ from torch.utils.data import DataLoader
 from wandb.sdk.lib import RunDisabled
 from wandb.wandb_run import Run
 
-
-sys.path.append('../..')
-
-import warnings
-
-from pisr.config import BASE_CONFIG, WANDB_CONFIG
-from pisr.data import generate_dataloader, load_data, train_validation_split
-from pisr.experimental import define_path as pisr_flags
-from pisr.loss import KolmogorovLoss
-from pisr.model import SRCNN
-from pisr.sampling import get_low_res_grid
-from pisr.utils.loss_tracker import LossTracker
+from ..pisr.configs.wandb import WANDB_CONFIG
+from ..pisr.data import generate_dataloader, load_data, train_validation_split
+from ..pisr.experimental import define_path as pisr_flags
+from ..pisr.loss import KolmogorovLoss
+from ..pisr.model import SRCNN
+from ..pisr.sampling import get_low_res_grid
+from ..pisr.utils.loss_tracker import LossTracker
 
 
 warnings.filterwarnings('ignore', category=UserWarning)
 
 
-
 FLAGS = flags.FLAGS
 
-_CONFIG = config_flags.DEFINE_config_dict('config', BASE_CONFIG)
+_CONFIG = config_flags.DEFINE_config_file('config')
 _WANBD_CONFIG = config_flags.DEFINE_config_dict('wandb', WANDB_CONFIG)
 
 _EXPERIMENT_PATH = pisr_flags.DEFINE_path(
@@ -86,6 +76,8 @@ _CUDNN_BENCHMARKS = flags.DEFINE_boolean(
     'Whether to use CUDNN benchmarks or not.'
 )
 
+flags.mark_flags_as_required(['config', 'experiment_path', 'data_path'])
+
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 DEVICE_KWARGS = {'num_workers': 1, 'pin_memory': True} if DEVICE == 'cuda' else {}
@@ -112,15 +104,23 @@ def initialise_wandb() -> Optional[Run | RunDisabled]:
     """Initialise the Weights and Biases API."""
 
     wandb_run = None
-    if FLAGS.wandb.entity:
+
+    wandb_config = FLAGS.wandb
+    experiment_name = wandb_config.name or str(FLAGS.experiment_path.name)
+
+    # provide a better check for wandb_run
+    if wandb_config.entity:
 
         # initialise W&B API
         wandb_run = wandb.init(
             config=FLAGS.config.to_dict(),
-            entity=FLAGS.wandb.entity,
-            project=FLAGS.wandb.project,
-            group=FLAGS.wandb.group,
-            name=str(FLAGS.experiment_path.name)
+            entity=wandb_config.entity,
+            project=wandb_config.project,
+            name=experiment_name,
+            tags=wandb_config.tags,
+            group=wandb_config.group,
+            job_type=wandb_config.job_type,
+            notes=wandb_config.notes
         )
 
     # log current code state to W&B
@@ -140,11 +140,11 @@ def initialise_model() -> nn.Module:
         Initialised model.
     """
 
-    if not FLAGS.config.EXPERIMENT.SR_FACTOR % 2 == 1:
-        raise ValueError('SR_FACTOR must be odd for super-resolution.')
+    if not FLAGS.config.experiment.sr_factor % 2 == 1:
+        raise ValueError('sr_factor Must be odd for super-resolution.')
 
     # initialise model
-    model = SRCNN(lr_nx=FLAGS.config.EXPERIMENT.NX_LR, upscaling=FLAGS.config.EXPERIMENT.SR_FACTOR, mode='bicubic')
+    model = SRCNN(lr_nx=FLAGS.config.experiment.nx_lr, upscaling=FLAGS.config.experiment.sr_factor, mode='bicubic')
 
     model.to(torch.float)
     model.to(DEVICE)
@@ -197,12 +197,12 @@ def train_loop(model: nn.Module,
     for hi_res in dataloader:
 
         hi_res = hi_res.to(DEVICE, non_blocking=True)
-        lo_res = get_low_res_grid(hi_res, factor=FLAGS.config.EXPERIMENT.SR_FACTOR)
+        lo_res = get_low_res_grid(hi_res, factor=FLAGS.config.experiment.sr_factor)
 
         pred_hi_res = model(lo_res)
 
         # LOSS :: 01 :: Sensor Locations
-        pred_sensor_measurements = get_low_res_grid(pred_hi_res, factor=FLAGS.config.EXPERIMENT.SR_FACTOR)
+        pred_sensor_measurements = get_low_res_grid(pred_hi_res, factor=FLAGS.config.experiment.sr_factor)
         mag_sensor_err = oe.contract('... -> ', (pred_sensor_measurements - lo_res) ** 2)
 
         sensor_loss = mag_sensor_err / lo_res.numel()
@@ -220,7 +220,7 @@ def train_loop(model: nn.Module,
         l2_actual_loss = torch.sqrt(oe.contract('... -> ', (hi_res - pred_hi_res) ** 2) / oe.contract('... -> ', hi_res ** 2)) # type: ignore
 
         # LOSS :: 05 :: Total Loss
-        total_loss = FLAGS.config.TRAINING.LAMBDA * sensor_loss + momentum_loss + loss_fn.constraints * continuity_loss
+        total_loss = FLAGS.config.training.lambda_weight * sensor_loss + momentum_loss + loss_fn.constraints * continuity_loss
 
         # update batch losses
         batched_sensor_loss += sensor_loss.item() * hi_res.size(0)
@@ -296,21 +296,21 @@ def main(_):
 
     # load data
     u_all = load_data(h5_file=FLAGS.data_path, config=config)
-    train_u, validation_u = train_validation_split(u_all, config.DATA.NTRAIN, config.DATA.NVALIDATION, step=config.DATA.TAU)
+    train_u, validation_u = train_validation_split(u_all, config.data.ntrain, config.data.nvalidation, step=config.data.tau)
 
     # set `drop_last = True` if using: `torch.backends.cudnn.benchmark = True`
     dataloader_kwargs = dict(shuffle=True, drop_last=FLAGS.cudnn_benchmarks)
 
-    train_loader = generate_dataloader(train_u, config.TRAINING.BATCH_SIZE, dataloader_kwargs, DEVICE_KWARGS)
-    validation_loader = generate_dataloader(validation_u, config.TRAINING.BATCH_SIZE, dataloader_kwargs, DEVICE_KWARGS)
+    train_loader = generate_dataloader(train_u, config.training.batch_size, dataloader_kwargs, DEVICE_KWARGS)
+    validation_loader = generate_dataloader(validation_u, config.training.batch_size, dataloader_kwargs, DEVICE_KWARGS)
 
     # define loss function -- disable constraints
-    loss_fn = KolmogorovLoss(nk=config.SIMULATION.NK, re=config.SIMULATION.RE, dt=config.SIMULATION.DT, fwt_lb=config.TRAINING.FWT_LB, device=DEVICE)
+    loss_fn = KolmogorovLoss(nk=config.simulation.nk, re=config.simulation.re, dt=config.simulation.dt, fwt_lb=config.training.fwt_lb, device=DEVICE)
     loss_fn.constraints = False
 
     # initialise model / optimizer
     model = initialise_model()
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.TRAINING.LR, weight_decay=config.TRAINING.L2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.training.lr, weight_decay=config.training.l2)
 
     # generate training functions
     _loop_params = dict(model=model, loss_fn=loss_fn)
@@ -320,7 +320,7 @@ def main(_):
 
     # main training loop
     min_validation_loss = np.Inf
-    for epoch in range(config.TRAINING.N_EPOCHS):
+    for epoch in range(config.training.n_epochs):
 
         lt_training: LossTracker = train_fn()
         lt_validation: LossTracker = validation_fn()
@@ -355,14 +355,13 @@ def main(_):
         artifact_name = str(FLAGS.experiment_path).replace('/', '.')
 
         # define artifact
-        results_artifact = wandb.Artifact(name=artifact_name, type='results')
+        results_artifact = wandb.Artifact(name=f'{artifact_name}_results', type='results')
         results_artifact.add_dir(local_path=str(FLAGS.experiment_path))
+        wandb_run.log_artifact(results_artifact)
 
-        model_artifact = wandb.Artifact(name=artifact_name, type='model')
+        model_artifact = wandb.Artifact(name=f'{artifact_name}_model', type='model')
         model_artifact.add_file(str(FLAGS.experiment_path / 'model.pt'))
-
-        for artifact in (results_artifact, model_artifact):
-            wandb_run.log_artifact(artifact_or_path=artifact)
+        wandb_run.log_artifact(model_artifact)
 
 
 if __name__ == '__main__':

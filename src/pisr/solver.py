@@ -23,3 +23,6 @@ class Solver(Protocol[T]):
 
     def fourier_to_phys(self, t_hat: T, nref: Optional[int]) -> T:
         """fourier_to_phys"""
+
+    def energy_spectrum(self, t_hat: T, agg: bool) -> T:
+        """energy_spectrum"""

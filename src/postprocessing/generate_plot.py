@@ -11,20 +11,58 @@ import matplotlib.ticker as tck
 import numpy as np
 import torch
 import torch.nn as nn
+import yaml
+from absl import app, flags
+from ml_collections import config_dict, config_flags
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-
-sys.path.append('../..')
-
-from pisr.data import generate_dataloader, load_data, train_validation_split
-from pisr.layers import TimeDistributedWrapper
-from pisr.loss import KolmogorovLoss
-from pisr.model import SRCNN
-from pisr.sampling import get_low_res_grid
-from pisr.utils.config import ExperimentConfig
+from ..pisr.data import generate_dataloader, load_data, train_validation_split
+from ..pisr.experimental import define_path as pisr_flags
+from ..pisr.layers import TimeDistributedWrapper
+from ..pisr.loss import KolmogorovLoss
+from ..pisr.model import SRCNN
+from ..pisr.sampling import get_low_res_grid
+from ..pisr.utils.config import ExperimentConfig
 
 
-DEVICE = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+FLAGS = flags.FLAGS
+
+_CONFIG = config_flags.DEFINE_config_file('config')
+
+_EXPERIMENT_PATH = pisr_flags.DEFINE_path(
+    'experiment_path',
+    None,
+    'Path to experiment run.'
+)
+
+_DATA_PATH = pisr_flags.DEFINE_path(
+    'data_path',
+    None,
+    'Path to data.'
+)
+
+_PLOT_PATH = pisr_flags.DEFINE_path(
+    'plot_path',
+    None,
+    'Path to save plots to.'
+)
+
+_GPU = flags.DEFINE_integer(
+    'run_gpu',
+    0,
+    'Which GPU to run on.'
+)
+
+_MEMORY_FRACTION = flags.DEFINE_float(
+    'memory_fraction',
+    None,
+    'Memory fraction of GPU to use.'
+)
+
+flags.mark_flags_as_required(['config', 'experiment_path', 'data_path', 'plot_path'])
+
+
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 DEVICE_KWARGS = {'num_workers': 1, 'pin_memory': True} if DEVICE == 'cuda' else {}
 
 
@@ -49,7 +87,7 @@ class UpsampledResults(NamedTuple):
     hi_predicted: torch.Tensor | np.ndarray
 
 
-def get_upsampled(model: nn.Module, hi_res: torch.Tensor, factor: int, batch_size: int = 128) -> UpsampledResults:
+def get_upsampled(model: nn.Module, hi_res: torch.Tensor) -> UpsampledResults:
 
     """Upsample the generated low-resolution field.
 
@@ -59,16 +97,15 @@ def get_upsampled(model: nn.Module, hi_res: torch.Tensor, factor: int, batch_siz
         Model to use for predicted high-resolution field.
     hi_res: torch.Tensor
         Original data - this is then downsampled in the function.
-    factor: int
-        Upsampling factor to use.
-    batch_size: int
-        Batch size to use when predicting with the model.
 
     Returns
     =======
     results: UpsampledResults
         Super-resolved fields for each of the methods.
     """
+
+    factor = FLAGS.config.experiment.sr_factor
+    batch_size = FLAGS.config.training.batch_size
 
     def upsample_factory(shape: tuple[int, int], upsample: eUpsampling) -> nn.Module:
         return TimeDistributedUpsample(shape, mode=upsample.value)
@@ -134,7 +171,7 @@ def get_energy_spectrum(upsampled_results: UpsampledResults, loss_fn: Kolmogorov
     return es_results
 
 
-def get_data(data_path: Path, config: ExperimentConfig) -> torch.Tensor:
+def get_data(data_path: Path) -> torch.Tensor:
 
     """Load data from .h5 file
 
@@ -142,8 +179,6 @@ def get_data(data_path: Path, config: ExperimentConfig) -> torch.Tensor:
     ==========
     data_path: Path
         Data to load from file.
-    config: ExperimentConfig
-        Config used for the experiments
 
     Returns
     =======
@@ -151,22 +186,18 @@ def get_data(data_path: Path, config: ExperimentConfig) -> torch.Tensor:
         Loaded data.
     """
 
-    u_all = load_data(h5_file=data_path, config=config)
-    u_data, _ = train_validation_split(u_all, config.NTRAIN, config.NVALIDATION, step=config.TIME_STACK)
+    u_all = load_data(h5_file=data_path, config=FLAGS.config)
+    u_data, _ = train_validation_split(u_all, FLAGS.config.data.ntrain, FLAGS.config.data.nvalidation, step=FLAGS.config.data.tau)
 
     return u_data
 
 
-def initialise_model(lr_nx: int, upscaling: int, model_path: Path) -> nn.Module:
+def initialise_model(model_path: Path) -> nn.Module:
 
     """Load trained model
 
     Parameters
     ==========
-    lr_nx: int
-        Low-resolution grid-points.
-    upscaling: int
-        Factor to upscale by.
     model_path: Path
         Model to load.
 
@@ -177,7 +208,7 @@ def initialise_model(lr_nx: int, upscaling: int, model_path: Path) -> nn.Module:
     """
 
     # initialise model
-    model = SRCNN(lr_nx, upscaling)
+    model = SRCNN(FLAGS.config.experiment.nx_lr, FLAGS.config.experiment.sr_factor)
 
     # load model from file
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
@@ -189,7 +220,7 @@ def initialise_model(lr_nx: int, upscaling: int, model_path: Path) -> nn.Module:
     return model
 
 
-def generate_plot(upsampled_fields: UpsampledResults, energy_spectrums: UpsampledResults, plot_path: Path) -> None:
+def generate_plot(upsampled_fields: UpsampledResults, energy_spectrums: UpsampledResults) -> None:
 
     """Generates the plot in the paper.
 
@@ -201,8 +232,6 @@ def generate_plot(upsampled_fields: UpsampledResults, energy_spectrums: Upsample
         Super-resolved fields for each of the methods.
     energy_spectrums: UpsampledResults
         Energy spectrums for each of the super-resolved fields.
-    plot_path: Path
-        Path to save the resulting figure to.
     """
 
     def _rc_preamble() -> None:
@@ -300,8 +329,6 @@ def generate_plot(upsampled_fields: UpsampledResults, energy_spectrums: Upsample
     tick_loc_lo = np.linspace(-0.5, NX_LR - 0.5, 4 + 1)
     tick_loc_hi = np.linspace(-0.5, NX_HR - 0.5, 4 + 1)
 
-    tick_label = ['$0$', r'$\frac{\pi}{2}$', '$\pi$', r'$\frac{3\pi}{2}$', '$2\pi$']
-
     # axes for low-resolution image
     for axis in [axs[0].xaxis, axs[0].yaxis]:
         axis.set_ticks(tick_loc_lo)
@@ -383,49 +410,49 @@ def generate_plot(upsampled_fields: UpsampledResults, energy_spectrums: Upsample
     ## aligning plots and saving ###################################################################################
     fig.tight_layout()
     plt.subplots_adjust(wspace=0.0, hspace=0.3)
-    fig.savefig(plot_path, dpi=1000, bbox_inches='tight')
+    fig.savefig(FLAGS.plot_path, dpi=1000, bbox_inches='tight')
 
     plt.close(fig)
 
 
-def main(args: argparse.Namespace) -> None:
+def main(_) -> None:
 
-    model_path = args.experiment_path / 'model.pt'
+    if FLAGS.run_gpu is not None and FLAGS.run_gpu >= 0 and FLAGS.run_gpu < torch.cuda.device_count():
 
-    # load config
-    config = ExperimentConfig()
-    config.load_config(config_path=args.config_path)
+        global DEVICE
+        global DEVICE_KWARGS
 
-    # comute low-resolution grid points
-    lr_nx = int(config.NX / config.SR_FACTOR)
+        if not torch.cuda.is_available():
+            raise ValueError('Specified CUDA device unavailable.')
+
+        DEVICE = torch.device(f'cuda:{FLAGS.run_gpu}')
+        DEVICE_KWARGS = {'num_workers': 1, 'pin_memory': True}
+
+    if FLAGS.memory_fraction:
+        torch.cuda.set_per_process_memory_fraction(FLAGS.memory_fraction, DEVICE)
+
+    model_path = FLAGS.experiment_path / 'model.pt'
+
+    # get config from global flags
+    config = FLAGS.config
 
     # load data
-    u_data = get_data(args.data_path, config)
+    u_data = get_data(FLAGS.data_path)
 
     # initialise loss function and set constraints to false
-    loss_fn = KolmogorovLoss(nk=config.NK, re=config.RE, dt=config.DT, fwt_lb=config.FWT_LB, device=DEVICE)
+    loss_fn = KolmogorovLoss(nk=config.simulation.nk, re=config.simulation.re, dt=config.simulation.dt, fwt_lb=config.training.fwt_lb, device=DEVICE)
     loss_fn.constraints = False
 
     # load trained model
-    model = initialise_model(lr_nx, config.SR_FACTOR, model_path=model_path)
+    model = initialise_model(model_path=model_path)
 
     # upsample fields and generate energy spectrums
-    upsampled_fields = get_upsampled(model, u_data, factor=config.SR_FACTOR)
+    upsampled_fields = get_upsampled(model, u_data)
     energy_spectrums = get_energy_spectrum(upsampled_fields, loss_fn)
 
     # produce paper plots
-    generate_plot(upsampled_fields, energy_spectrums, args.plot_path)
+    generate_plot(upsampled_fields, energy_spectrums)
 
 
 if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(description='Postprocessing Script')
-
-    parser.add_argument('-ep', '--experiment-path', type=Path, required=True)
-    parser.add_argument('-dp', '--data-path', type=Path, required=True)
-    parser.add_argument('-cp', '--config-path', type=Path, required=True)
-    parser.add_argument('-pp', '--plot-path', type=Path, required=True)
-
-    parsed_args = parser.parse_args()
-
-    main(parsed_args)
+    app.run(main)

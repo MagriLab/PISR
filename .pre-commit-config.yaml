@@ -17,14 +17,6 @@ repos:
       hooks:
       -   id: pylint
           name: pylint
-          entry: pylint ./pisr
-          language: system
-          pass_filenames: false
-
-  -   repo: local
-      hooks:
-      -   id: mypy
-          name: mypy
-          entry: mypy ./pisr
+          entry: pylint ./src
           language: system
           pass_filenames: false
