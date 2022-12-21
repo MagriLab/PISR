@@ -1,9 +1,7 @@
-from typing import Optional
-
 import torch
 from torch import nn
 
-from .layers import TimeDistributedConv2d, TimeDistributedConvTranspose2d, TimeDistributedUpsample
+from .layers import TimeDistributedConv2d, TimeDistributedPeriodicUpsample
 from .utils.checks import ValidateDimension
 
 
@@ -35,14 +33,13 @@ class SRCNN(nn.Module):
         self.mode = mode
 
         self.lr_nx = lr_nx
-        self.hr_nx = self.lr_nx * self.upscaling
 
         self._conv_kwargs = dict(padding='same', padding_mode='circular')
 
         # define layers
         self.activation = nn.ReLU(inplace=True)
 
-        self.upsample = TimeDistributedUpsample((self.hr_nx, self.hr_nx), mode=self.mode)
+        self.upsample = TimeDistributedPeriodicUpsample(mode=self.mode, scale_factor=self.upscaling, npad=self.lr_nx // 2)
 
         self.conv1 = TimeDistributedConv2d(2, 64, kernel_size=(9, 9), **self._conv_kwargs)
         self.conv2 = TimeDistributedConv2d(64, 32, kernel_size=(5, 5), **self._conv_kwargs)
@@ -151,7 +148,6 @@ class VDSR(nn.Module):
         self.mode = mode
 
         self.lr_nx = lr_nx
-        self.hr_nx = self.lr_nx * self.upscaling
 
         _conv_dict = dict(
             in_channels=self.n_filters,
@@ -165,7 +161,7 @@ class VDSR(nn.Module):
         self.activation = nn.ReLU(inplace=True)
 
         # define layers
-        self.upsample = TimeDistributedUpsample((self.hr_nx, self.hr_nx), mode=self.mode)
+        self.upsample = TimeDistributedPeriodicUpsample(mode=self.mode, scale_factor=self.upscaling, npad=self.lr_nx // 2)
         self.vdsr_layers = nn.ModuleList([VDSRBlock(self.n_filters, self.kernel_size) for _ in range(self.n_layers)])
         self.final_layer = VDSRBlock(self.n_filters, self.kernel_size)
 
