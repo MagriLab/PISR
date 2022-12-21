@@ -1,9 +1,36 @@
+import functools as ft
 from typing import Any, Type
 
 import torch
 from torch import nn
 
 from .utils.exceptions import DimensionError
+
+
+class PeriodicUpsampler(nn.Module):
+
+    def __init__(self, mode: str, scale_factor: int, npad: int = 10) -> None:
+
+        super().__init__()
+
+        self.mode = mode
+        self.scale_factor = scale_factor
+        self.npad = npad
+
+        self.fn_pad = ft.partial(nn.functional.pad, mode='circular', pad=tuple(self.npad for _ in range(4)))
+        self.upsampler = nn.Upsample(scale_factor=self.scale_factor, mode=self.mode)
+
+        upsampled_pad = self.scale_factor * self.npad
+        self.slice = slice(upsampled_pad, -upsampled_pad)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
+        x = self.fn_pad(x)
+        x = self.upsampler(x)
+
+        x = x[..., self.slice, self.slice]
+
+        return x
 
 
 class TimeDistributed(nn.Module):
@@ -80,5 +107,5 @@ class TimeDistributedWrapper:
 # defining TimeDistributed layers
 TimeDistributedConv2d = TimeDistributedWrapper(nn.Conv2d)
 TimeDistributedConvTranspose2d = TimeDistributedWrapper(nn.ConvTranspose2d)
-TimeDistributedUpsamplingBilinear2d = TimeDistributedWrapper(nn.UpsamplingBilinear2d)
+TimeDistributedPeriodicUpsample = TimeDistributedWrapper(PeriodicUpsampler)
 TimeDistributedUpsample = TimeDistributedWrapper(nn.Upsample)
