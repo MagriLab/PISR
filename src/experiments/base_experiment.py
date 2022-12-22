@@ -15,13 +15,14 @@ from typing import Optional
 import numpy as np
 import opt_einsum as oe
 import torch
-import wandb
 from absl import app, flags
 from ml_collections import config_flags
 from torch import nn
 from torch.utils.data import DataLoader
 from wandb.sdk.lib import RunDisabled
 from wandb.wandb_run import Run
+
+import wandb
 
 from ..pisr.configs.wandb import WANDB_CONFIG
 from ..pisr.data import generate_dataloader, load_data, train_validation_split
@@ -125,7 +126,7 @@ def initialise_wandb() -> Optional[Run | RunDisabled]:
 
     # log current code state to W&B
     if wandb_run:
-        wandb_run.log_code(str(Path.cwd()))
+        wandb_run.log_code('./src')
 
     return wandb_run
 
