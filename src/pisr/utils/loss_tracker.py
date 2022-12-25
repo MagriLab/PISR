@@ -8,7 +8,6 @@ class LossTracker:
     sensor_loss: float = field(default=-1.0)
     l2_sensor_loss: float = field(default=-1.0)
     momentum_loss: float = field(default=-1.0)
-    continuity_loss: float = field(default=-1.0)
     total_loss: float = field(default=-1.0)
     l2_actual_loss: float = field(default=-1.0)
 

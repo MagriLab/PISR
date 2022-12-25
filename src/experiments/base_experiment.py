@@ -1,11 +1,3 @@
-"""TODO
-
-## Weights and Biases
-- Better checks for whether to log.
-- Force online / offline syncing.
-- Log images of results.
-"""
-
 import csv
 import functools as ft
 import warnings
@@ -24,13 +16,13 @@ from wandb.wandb_run import Run
 
 import wandb
 
-from ..pisr.configs.wandb import WANDB_CONFIG
 from ..pisr.data import generate_dataloader, load_data, train_validation_split
 from ..pisr.experimental import define_path as pisr_flags
 from ..pisr.loss import KolmogorovLoss
 from ..pisr.model import SRCNN
 from ..pisr.sampling import get_low_res_grid
 from ..pisr.utils.loss_tracker import LossTracker
+from .configs.wandb import WANDB_CONFIG
 
 
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -107,10 +99,14 @@ def initialise_wandb() -> Optional[Run | RunDisabled]:
     wandb_run = None
 
     wandb_config = FLAGS.wandb
-    experiment_name = wandb_config.name or str(FLAGS.experiment_path.name)
+    experiment_name = wandb_config.name or str(FLAGS.experiment_path)
+
+    tags = wandb_config.tags
+    if tags:
+        tags = tags.split(':')
 
     # provide a better check for wandb_run
-    if wandb_config.entity:
+    if wandb_config.entity and wandb_config.project:
 
         # initialise W&B API
         wandb_run = wandb.init(
@@ -118,8 +114,8 @@ def initialise_wandb() -> Optional[Run | RunDisabled]:
             entity=wandb_config.entity,
             project=wandb_config.project,
             name=experiment_name,
-            tags=wandb_config.tags,
             group=wandb_config.group,
+            tags=tags,
             job_type=wandb_config.job_type,
             notes=wandb_config.notes
         )
@@ -186,7 +182,6 @@ def train_loop(model: nn.Module,
 
     # physics-based loss
     batched_momentum_loss = (0.0 + 0.0j)
-    batched_continuity_loss = (0.0 + 0.0j)
 
     batched_total_loss = (0.0 + 0.0j)
 
@@ -212,24 +207,17 @@ def train_loop(model: nn.Module,
         # LOSS :: 02 :: Momentum Loss
         momentum_loss = loss_fn.calc_residual_loss(pred_hi_res)
 
-        # LOSS :: 03 :: Continuity Loss
-        continuity_loss = torch.zeros_like(momentum_loss)
-        if loss_fn.constraints:
-            continuity_loss = loss_fn.calc_constraint_loss(pred_hi_res)
-
-        # LOSS :: 04 :: Actual Loss
+        # LOSS :: 03 :: Actual Loss
         l2_actual_loss = torch.sqrt(oe.contract('... -> ', (hi_res - pred_hi_res) ** 2) / oe.contract('... -> ', hi_res ** 2)) # type: ignore
 
-        # LOSS :: 05 :: Total Loss
-        total_loss = FLAGS.config.training.lambda_weight * sensor_loss + momentum_loss + loss_fn.constraints * continuity_loss
+        # LOSS :: 04 :: Total Loss
+        total_loss =  sensor_loss + FLAGS.config.training.lambda_weight * momentum_loss
 
         # update batch losses
         batched_sensor_loss += sensor_loss.item() * hi_res.size(0)
         batched_l2_sensor_loss += l2_sensor_loss.item() * hi_res.size(0)
 
         batched_momentum_loss += momentum_loss.item() * hi_res.size(0)
-        batched_continuity_loss += continuity_loss.item() * hi_res.size(0)
-
         batched_total_loss += total_loss.item() * hi_res.size(0)
 
         batched_l2_actual_loss += l2_actual_loss.item() * hi_res.size(0)
@@ -246,7 +234,6 @@ def train_loop(model: nn.Module,
     batched_sensor_loss = float(abs(batched_sensor_loss)) / len(dataloader.dataset)                      # type: ignore
     batched_l2_sensor_loss = float(abs(batched_l2_sensor_loss)) / len(dataloader.dataset)                # type: ignore
     batched_momentum_loss = float(abs(batched_momentum_loss)) / len(dataloader.dataset)                  # type: ignore
-    batched_continuity_loss = float(abs(batched_continuity_loss)) / len(dataloader.dataset)              # type: ignore
     batched_total_loss = float(abs(batched_total_loss)) / len(dataloader.dataset)                        # type: ignore
     batched_l2_actual_loss = float(abs(batched_l2_actual_loss)) / len(dataloader.dataset)                # type: ignore
 
@@ -254,7 +241,6 @@ def train_loop(model: nn.Module,
         'sensor_loss': batched_sensor_loss,
         'l2_sensor_loss': batched_l2_sensor_loss,
         'momentum_loss': batched_momentum_loss,
-        'continuity_loss': batched_continuity_loss,
         'total_loss': batched_total_loss,
         'l2_actual_loss': batched_l2_actual_loss
     }
@@ -363,6 +349,8 @@ def main(_):
         model_artifact = wandb.Artifact(name=f'{artifact_name}_model', type='model')
         model_artifact.add_file(str(FLAGS.experiment_path / 'model.pt'))
         wandb_run.log_artifact(model_artifact)
+
+        wandb_run.finish()
 
 
 if __name__ == '__main__':

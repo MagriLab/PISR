@@ -1,26 +1,7 @@
 import ml_collections
-from ml_collections import config_dict
 
 
-def get_config(sr_factor: str) -> ml_collections.ConfigDict:
-
-    config = base_config()
-
-    # make sure string is of the right format
-    if not sr_factor.endswith('x'):
-        raise ValueError('Must provide sr_factor as the following: "7x".')
-
-    _factor = int(sr_factor[:-1])
-
-    if _factor % 2 == 0:
-        raise ValueError('Must provide odd super-resolution factor.')
-
-    config.experiment.sr_factor = _factor
-
-    return config
-
-
-def base_config() -> ml_collections.ConfigDict:
+def get_config() -> ml_collections.ConfigDict:
 
     config = ml_collections.ConfigDict()
 
@@ -43,7 +24,7 @@ def base_config() -> ml_collections.ConfigDict:
     config.experiment = ml_collections.ConfigDict()
 
     config.experiment.nx_lr = 10
-    config.experiment.sr_factor = config_dict.placeholder(int)
+    config.experiment.sr_factor = 7
 
     # training configuration
     config.training = ml_collections.ConfigDict()
@@ -52,7 +33,7 @@ def base_config() -> ml_collections.ConfigDict:
     config.training.batch_size = 128
     config.training.lr = 3e-4
     config.training.l2 = 0.0
-    config.training.lambda_weight = 1e6
+    config.training.lambda_weight = 1e-6
     config.training.fwt_lb = 1.0
 
     return config
