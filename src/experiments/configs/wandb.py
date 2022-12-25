@@ -10,7 +10,7 @@ def get_wandb_config() -> ml_collections.ConfigDict:
     config.project = placeholder(str)
 
     config.name = placeholder(str)
-    config.tags = placeholder(tuple)
+    config.tags = placeholder(str)
     config.group = placeholder(str)
     config.job_type = placeholder(str)
 
