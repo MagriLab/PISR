@@ -195,6 +195,13 @@ def train_loop(model: nn.Module,
         hi_res = hi_res.to(DEVICE, non_blocking=True)
         lo_res = get_low_res_grid(hi_res, factor=FLAGS.config.experiment.sr_factor)
 
+        if FLAGS.config.experiment.noise_std > 0.0:
+
+            mean = torch.zeros(*lo_res.shape)
+            std = FLAGS.config.experiment.noise_std * torch.ones(*lo_res.shape)
+
+            lo_res += torch.normal(mean=mean, std=std).to(DEVICE)
+
         pred_hi_res = model(lo_res)
 
         # LOSS :: 01 :: Sensor Locations
@@ -298,6 +305,7 @@ def main(_):
     # initialise model / optimizer
     model = initialise_model()
     optimizer = torch.optim.Adam(model.parameters(), lr=config.training.lr, weight_decay=config.training.l2)
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=FLAGS.config.training.lr_gamma)
 
     # generate training functions
     _loop_params = dict(model=model, loss_fn=loss_fn)
@@ -311,6 +319,8 @@ def main(_):
 
         lt_training: LossTracker = train_fn()
         lt_validation: LossTracker = validation_fn()
+
+        lr_scheduler.step()
 
         # update global validation loss if model improves
         if lt_validation.total_loss < min_validation_loss:
