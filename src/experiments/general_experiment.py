@@ -99,9 +99,6 @@ def main(_) -> None:
     with Pool(processes=PROCS_PER_GPU * NUM_GPUS) as pool:
         pool.map(run_job, job_list)
 
-        pool.join()
-        pool.close()
-
 
 if __name__ == "__main__":
     app.run(main)
