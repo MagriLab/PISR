@@ -1,6 +1,6 @@
 import functools as ft
 import itertools as it
-from typing import Any, Callable, ParamSpec, TypeAlias, TypeVar
+from typing import Callable, ParamSpec, TypeAlias, TypeVar
 
 import numpy as np
 import torch
@@ -46,13 +46,12 @@ class ValidateDimension:
         @ft.wraps(fn)
         def _fn(*args: P.args, **kwargs: P.kwargs) -> T:
 
-            # TODO >> Remove mypy pass once mypy is updated:  https://github.com/python/mypy/pull/13459
-            arg_chain = it.chain(args, kwargs.values())                                                   # type: ignore
-            if not any(map(lambda _arg: isinstance(_arg, TypeTensor.__args__), arg_chain)):               # type: ignore
+            arg_chain = it.chain(args, kwargs.values())
+            if not any(map(lambda _arg: isinstance(_arg, TypeTensor.__args__), arg_chain)):
                 raise DimensionWarning('No arguments with dimensions to check')
 
             for arg in arg_chain:
-                if isinstance(arg, TypeTensor.__args__) and not len(arg.shape) == self.ndim:              # type: ignore
+                if isinstance(arg, TypeTensor.__args__) and not len(arg.shape) == self.ndim:
                     raise DimensionError(expected=self.ndim, received=len(arg.shape))
 
             return fn(*args, **kwargs)

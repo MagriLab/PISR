@@ -1,19 +1,15 @@
-import argparse
 import enum
-import sys
 from pathlib import Path
 from typing import NamedTuple
 
 import einops
-import h5py
 import matplotlib.pyplot as plt
 import matplotlib.ticker as tck
 import numpy as np
 import torch
 import torch.nn as nn
-import yaml
 from absl import app, flags
-from ml_collections import config_dict, config_flags
+from ml_collections import config_flags
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from ..pisr.data import generate_dataloader, load_data, train_validation_split
@@ -22,7 +18,6 @@ from ..pisr.layers import TimeDistributedWrapper
 from ..pisr.loss import KolmogorovLoss
 from ..pisr.model import SRCNN
 from ..pisr.sampling import get_low_res_grid
-from ..pisr.utils.config import ExperimentConfig
 
 
 FLAGS = flags.FLAGS
@@ -92,14 +87,14 @@ def get_upsampled(model: nn.Module, hi_res: torch.Tensor) -> UpsampledResults:
     """Upsample the generated low-resolution field.
 
     Parameters
-    ==========
+    ----------
     model: nn.Module
         Model to use for predicted high-resolution field.
     hi_res: torch.Tensor
         Original data - this is then downsampled in the function.
 
     Returns
-    =======
+    -------
     results: UpsampledResults
         Super-resolved fields for each of the methods.
     """
@@ -142,14 +137,14 @@ def get_energy_spectrum(upsampled_results: UpsampledResults, loss_fn: Kolmogorov
     """Compute the energy spectrum.
 
     Parameters
-    ==========
+    ----------
     upsampled_results: UpsampledResults
         Upsampled fields to compute energy spectrum for.
     loss_fn: KolmogorovLoss
         Loss function which contains solver used to compute spectrum.
 
     Returns
-    =======
+    -------
     es_results: UpsampledResults
         Energy spectrums for each of the upsampled results.
     """
@@ -164,6 +159,7 @@ def get_energy_spectrum(upsampled_results: UpsampledResults, loss_fn: Kolmogorov
             _results[k] = None
             continue
 
+        # TODO >> This is the only place we need `solver.energy_spectum` -- can we remove from Protocol?
         _results[k] = loss_fn.solver.energy_spectrum(to_fourier(v), agg=True).detach().cpu().numpy()
 
     es_results = UpsampledResults(**_results)
@@ -176,12 +172,12 @@ def get_data(data_path: Path) -> torch.Tensor:
     """Load data from .h5 file
 
     Parameters
-    ==========
+    ----------
     data_path: Path
         Data to load from file.
 
     Returns
-    =======
+    -------
     u_data: torch.Tensor
         Loaded data.
     """
@@ -197,12 +193,12 @@ def initialise_model(model_path: Path) -> nn.Module:
     """Load trained model
 
     Parameters
-    ==========
+    ----------
     model_path: Path
         Model to load.
 
     Returns
-    =======
+    -------
     model: nn.Module
         Initialised model.
     """
@@ -227,7 +223,7 @@ def generate_plot(upsampled_fields: UpsampledResults, energy_spectrums: Upsample
     Note: this is somewhat hardcoded, for best results please use experimental setting described in the paper.
 
     Parameters
-    ==========
+    ----------
     upsampled_fields: UpsampledResults
         Super-resolved fields for each of the methods.
     energy_spectrums: UpsampledResults
@@ -273,13 +269,13 @@ def generate_plot(upsampled_fields: UpsampledResults, energy_spectrums: Upsample
     random_idx = np.random.choice(np.arange(upsampled_fields.hi_true.shape[0]), 1, replace=False)[0]
 
     ## plotting the fields #########################################################################################
-    im_lo = axs[0].imshow(upsampled_fields.lo_true[random_idx, 0, 0, ...], cmap=cmap, vmin=vmin, vmax=vmax)
-    im_hi = axs[3].imshow(upsampled_fields.hi_true[random_idx, 0, 0, ...], cmap=cmap, vmin=vmin, vmax=vmax)
+    axs[0].imshow(upsampled_fields.lo_true[random_idx, 0, 0, ...], cmap=cmap, vmin=vmin, vmax=vmax)
+    axs[3].imshow(upsampled_fields.hi_true[random_idx, 0, 0, ...], cmap=cmap, vmin=vmin, vmax=vmax)
 
-    im_bl = axs[1].imshow(upsampled_fields.hi_bilinear[random_idx, 0, 0, ...], cmap=cmap, vmin=vmin, vmax=vmax)
+    axs[1].imshow(upsampled_fields.hi_bilinear[random_idx, 0, 0, ...], cmap=cmap, vmin=vmin, vmax=vmax)
     im_bc = axs[2].imshow(upsampled_fields.hi_bicubic[random_idx, 0, 0, ...], cmap=cmap, vmin=vmin, vmax=vmax)
 
-    im_pred = axs[4].imshow(upsampled_fields.hi_predicted[random_idx, 0, 0, ...], cmap=cmap, vmin=vmin, vmax=vmax)
+    axs[4].imshow(upsampled_fields.hi_predicted[random_idx, 0, 0, ...], cmap=cmap, vmin=vmin, vmax=vmax)
 
     ## plotting the energy spectrum ################################################################################
     x_vals = np.arange(energy_spectrums.hi_true.shape[0])

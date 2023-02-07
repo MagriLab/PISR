@@ -25,6 +25,19 @@ class PeriodicUpsampler(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
 
+        """Periodic upsampling.
+
+        Parameters
+        ----------
+        x: torch.Tensor
+            Low resolution tensor to upsample.
+
+        Returns
+        -------
+        torch.Tensor
+            Upsampled tensor, with periodic padding.
+        """
+
         x = self.fn_pad(x)
         x = self.upsampler(x)
 
