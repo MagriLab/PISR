@@ -138,10 +138,14 @@ def initialise_model() -> nn.Module:
     """
 
     if not FLAGS.config.experiment.sr_factor % 2 == 1:
-        raise ValueError('sr_factor Must be odd for super-resolution.')
+        raise ValueError('sr_factor must be odd for super-resolution.')
 
     # initialise model
-    model = SRCNN(lr_nx=FLAGS.config.experiment.nx_lr, upscaling=FLAGS.config.experiment.sr_factor, mode='bicubic')
+    model = SRCNN(
+        lr_nx=FLAGS.config.experiment.nx_lr,
+        upscaling=FLAGS.config.experiment.sr_factor.upsample,
+        mode='bicubic'
+    )
 
     model.to(torch.float)
     model.to(DEVICE)
@@ -188,12 +192,13 @@ def train_loop(model: nn.Module,
     # l2 loss against actual data
     batched_l2_actual_loss = (0.0 + 0.0j)
 
+    eq_sample = FLAGS.config.experiment.sr_factor.upsample == FLAGS.config.experiment.sr_factor.downsample
 
     model.train(mode=set_train)
     for hi_res in dataloader:
 
         hi_res = hi_res.to(DEVICE, non_blocking=True)
-        lo_res = get_low_res_grid(hi_res, factor=FLAGS.config.experiment.sr_factor)
+        lo_res = get_low_res_grid(hi_res, factor=FLAGS.config.experiment.sr_factor.downsample)
 
         if FLAGS.config.experiment.noise_std > 0.0:
 
@@ -205,19 +210,16 @@ def train_loop(model: nn.Module,
         pred_hi_res = model(lo_res)
 
         # LOSS :: 01 :: Sensor Locations
-        pred_sensor_measurements = get_low_res_grid(pred_hi_res, factor=FLAGS.config.experiment.sr_factor)
+        pred_sensor_measurements = get_low_res_grid(pred_hi_res, factor=FLAGS.config.experiment.sr_factor.upsample)
         mag_sensor_err = oe.contract('... -> ', (pred_sensor_measurements - lo_res) ** 2)
 
         sensor_loss = mag_sensor_err / lo_res.numel()
-        l2_sensor_loss = torch.sqrt(mag_sensor_err / oe.contract('... -> ', lo_res ** 2))                  # type: ignore
+        l2_sensor_loss = torch.sqrt(mag_sensor_err / oe.contract('... -> ', lo_res ** 2))
 
         # LOSS :: 02 :: Momentum Loss
         momentum_loss = loss_fn.calc_residual_loss(pred_hi_res)
 
-        # LOSS :: 03 :: Actual Loss
-        l2_actual_loss = torch.sqrt(oe.contract('... -> ', (hi_res - pred_hi_res) ** 2) / oe.contract('... -> ', hi_res ** 2)) # type: ignore
-
-        # LOSS :: 04 :: Total Loss
+        # LOSS :: 03 :: Total Loss
         total_loss =  sensor_loss + FLAGS.config.training.lambda_weight * momentum_loss
 
         # update batch losses
@@ -227,7 +229,10 @@ def train_loop(model: nn.Module,
         batched_momentum_loss += momentum_loss.item() * hi_res.size(0)
         batched_total_loss += total_loss.item() * hi_res.size(0)
 
-        batched_l2_actual_loss += l2_actual_loss.item() * hi_res.size(0)
+        # LOSS :: 04 :: Actual Loss
+        if eq_sample:
+            l2_actual_loss = torch.sqrt(oe.contract('... -> ', (hi_res - pred_hi_res) ** 2) / oe.contract('... -> ', hi_res ** 2))
+            batched_l2_actual_loss += l2_actual_loss.item() * hi_res.size(0)
 
         # update gradients
         if set_train and optimizer:
@@ -300,7 +305,6 @@ def main(_):
 
     # define loss function -- disable constraints
     loss_fn = KolmogorovLoss(nk=config.simulation.nk, re=config.simulation.re, dt=config.simulation.dt, fwt_lb=config.training.fwt_lb, device=DEVICE)
-    loss_fn.constraints = False
 
     # initialise model / optimizer
     model = initialise_model()

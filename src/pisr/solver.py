@@ -1,28 +1,30 @@
 from typing import Optional, Protocol, TypeVar
 
-import numpy as np
-import torch
 
-
-T = TypeVar('T', np.ndarray, torch.Tensor)
+T = TypeVar('T')
 
 
 class Solver(Protocol[T]):
 
     nk: int
+    nk_grid: int
+
     kk: T
     nabla: T
 
     ndim: int
 
     def dynamics(self, u_hat: T) -> T:
-        """dynamics"""
+        ...
 
+    # TODO >> Should not be part of the Protocol
     def phys_to_fourier(self, t: T) -> T:
-        """phys_to_fourier"""
+        ...
 
+    # TODO >> Should not be part of the Protocol
     def fourier_to_phys(self, t_hat: T, nref: Optional[int]) -> T:
-        """fourier_to_phys"""
+        ...
 
-    def energy_spectrum(self, t_hat: T, agg: bool) -> T:
-        """energy_spectrum"""
+    # TODO >> Should not be part of the Protocol
+    def energy_spectrum(self, u_hat: T, agg: bool) -> T:
+        ...

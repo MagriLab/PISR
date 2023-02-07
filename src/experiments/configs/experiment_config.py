@@ -16,7 +16,10 @@ def get_e01_config(case: str) -> FlattenedDict:
         'C5': 15,
     }[case]
 
-    config_diff = {'experiment.sr_factor': sr_factor}
+    config_diff = {
+        'experiment.sr_factor.upsample': sr_factor,
+        'experiment.sr_factor.downsample': sr_factor
+    }
 
     return config_diff
 

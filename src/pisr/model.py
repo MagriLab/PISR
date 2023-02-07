@@ -12,7 +12,7 @@ class SRCNN(nn.Module):
         """SRCNN: Standard CNN for Super-Resolution.
 
         Parameters:
-        ===========
+        -----------
         lr_nx: int
             Low-resolution grid-points.
         upscaling: int
@@ -29,21 +29,24 @@ class SRCNN(nn.Module):
         if mode not in ['bilinear', 'bicubic']:
             raise ValueError('Choose relevant mode for upsampling...')
 
+        self.lr_nx = lr_nx
         self.upscaling = upscaling
         self.mode = mode
-
-        self.lr_nx = lr_nx
-
-        self._conv_kwargs = dict(padding='same', padding_mode='circular')
 
         # define layers
         self.activation = nn.ReLU(inplace=True)
 
-        self.upsample = TimeDistributedPeriodicUpsample(mode=self.mode, scale_factor=self.upscaling, npad=self.lr_nx // 2)
+        self.upsample = TimeDistributedPeriodicUpsample(
+            mode=self.mode,
+            scale_factor=self.upscaling,
+            npad=self.lr_nx // 2
+        )
 
-        self.conv1 = TimeDistributedConv2d(2, 64, kernel_size=(9, 9), **self._conv_kwargs)
-        self.conv2 = TimeDistributedConv2d(64, 32, kernel_size=(5, 5), **self._conv_kwargs)
-        self.conv3 = TimeDistributedConv2d(32, 2, kernel_size=(5, 5), **self._conv_kwargs)
+        _conv_kwargs = dict(padding='same', padding_mode='circular')
+
+        self.conv1 = TimeDistributedConv2d(2, 64, kernel_size=(9, 9), **_conv_kwargs)
+        self.conv2 = TimeDistributedConv2d(64, 32, kernel_size=(5, 5), **_conv_kwargs)
+        self.conv3 = TimeDistributedConv2d(32, 2, kernel_size=(5, 5), **_conv_kwargs)
 
     @ValidateDimension(ndim=5)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -51,12 +54,12 @@ class SRCNN(nn.Module):
         """Forward pass through the model.
 
         Parameters:
-        ===========
+        -----------
         x: torch.Tensor
             Tensor to pass through the model.
 
         Returns:
-        ========
+        --------
         torch.Tensor
             Output of the model.
         """
@@ -97,14 +100,14 @@ class VDSRBlock(nn.Module):
         """Forward pass through the model.
 
         Parameters:
-        ===========
+        -----------
         x: torch.Tensor
             Tensor to pass through the model.
         activation: bool
             Whether to use the activation function.
 
         Returns:
-        ========
+        --------
         torch.Tensor
             Output of the model.
         """
@@ -127,7 +130,7 @@ class VDSR(nn.Module):
         """VDSR: VGG-Net based architecture.
 
         Parameters:
-        ===========
+        -----------
         lr_nx: int
             Low-resolution grid-points.
         upscaling: int
@@ -144,24 +147,20 @@ class VDSR(nn.Module):
         if mode not in ['bilinear', 'bicubic']:
             raise ValueError('Choose relevant mode for upsampling...')
 
+        self.lr_nx = lr_nx
         self.upscaling = upscaling
         self.mode = mode
-
-        self.lr_nx = lr_nx
-
-        _conv_dict = dict(
-            in_channels=self.n_filters,
-            out_channels=self.n_filters,
-            kernel_size=self.kernel_size,
-            padding='same',
-            padding_mode='circular'
-        )
 
         # define activation
         self.activation = nn.ReLU(inplace=True)
 
         # define layers
-        self.upsample = TimeDistributedPeriodicUpsample(mode=self.mode, scale_factor=self.upscaling, npad=self.lr_nx // 2)
+        self.upsample = TimeDistributedPeriodicUpsample(
+            mode=self.mode,
+            scale_factor=self.upscaling,
+            npad=self.lr_nx // 2
+        )
+
         self.vdsr_layers = nn.ModuleList([VDSRBlock(self.n_filters, self.kernel_size) for _ in range(self.n_layers)])
         self.final_layer = VDSRBlock(self.n_filters, self.kernel_size)
 
@@ -171,12 +170,12 @@ class VDSR(nn.Module):
         """Forward pass through the model.
 
         Parameters:
-        ===========
+        -----------
         x: torch.Tensor
             Tensor to pass through the model.
 
         Returns:
-        ========
+        --------
         torch.Tensor
             Output of the model.
         """

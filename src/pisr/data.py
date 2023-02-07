@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 from .utils.dataset import UnlabeledTensorDataset
 
 
+# TODO >> utils.types define an ExperimentConfig: TypeAlias = Any
 def load_data(h5_file: Path, config: ml_collections.ConfigDict) -> torch.Tensor:
 
     """Loads simulation data as torch.Tensor.
@@ -40,7 +41,7 @@ def load_data(h5_file: Path, config: ml_collections.ConfigDict) -> torch.Tensor:
 
     # stack N consecutive time-steps in a new dimension
     list_u = []
-    for i, j in zip(range(config.data.tau), map(operator.neg, reversed(range(config.data.tau)))):
+    for i, j in zip(range(config.data.tau), map(operator.neg, reversed(range(config.data.tau))), strict=True):
         sl = slice(i, j) if j < 0 else slice(i, None)
         list_u.append(u_all[sl])
 

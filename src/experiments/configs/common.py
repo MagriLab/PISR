@@ -24,7 +24,10 @@ def get_config() -> ml_collections.ConfigDict:
     config.experiment = ml_collections.ConfigDict()
 
     config.experiment.nx_lr = 10
-    config.experiment.sr_factor = 7
+
+    config.experiment.sr_factor = ml_collections.ConfigDict()
+    config.experiment.sr_factor.downsample = 7
+    config.experiment.sr_factor.upsample = 7
 
     config.experiment.noise_std = 0.0
 
