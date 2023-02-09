@@ -4,7 +4,6 @@ from typing import Any
 
 import einops
 import h5py
-import ml_collections
 import numpy as np
 import torch
 from kolsol.numpy.solver import KolSol
@@ -14,7 +13,7 @@ from .utils.dataset import UnlabeledTensorDataset
 
 
 # TODO >> utils.types define an ExperimentConfig: TypeAlias = Any
-def load_data(h5_file: Path, config: ml_collections.ConfigDict) -> torch.Tensor:
+def load_data(h5_file: Path, config: Any) -> torch.Tensor:
 
     """Loads simulation data as torch.Tensor.
 
@@ -22,7 +21,7 @@ def load_data(h5_file: Path, config: ml_collections.ConfigDict) -> torch.Tensor:
     ----------
     h5_file: Path
         Path to the .h5 file containing simulation data.
-    config: ml_collections.ConfigDict
+    config: Any
         Configuration object holding key information about simulation.
 
     Returns
@@ -32,12 +31,23 @@ def load_data(h5_file: Path, config: ml_collections.ConfigDict) -> torch.Tensor:
     """
 
     with h5py.File(h5_file, 'r') as hf:
+
+        def get_scalar(key: str) -> float:
+            return float(hf.get(key)[()])                                                                # type: ignore
+
+        if not (re := get_scalar('re')) == config.simulation.re:
+            raise ValueError(f'Simulation {re=} does not match {config.simulation.re=}')
+
+        if not (nk := get_scalar('nk')) == config.simulation.nk:
+            raise ValueError(f'Simultaion {nk=} does not match {config.simulation.nk=}')
+
+        if not (dt := get_scalar('dt')) == config.simulation.dt:
+            raise ValueError(f'Simultaion {dt=} does not match {config.simulation.nk=}')
+
         u_all_hat = np.array(hf.get('velocity_field_hat'))
 
     ks = KolSol(nk=config.simulation.nk, nf=4, re=config.simulation.re, ndim=2)
-
-    nx_hr = int(config.experiment.nx_lr * config.experiment.sr_factor)
-    u_all = ks.fourier_to_phys(u_all_hat, nref=nx_hr)
+    u_all = ks.fourier_to_phys(u_all_hat, nref=config.experiment.nx_hr)
 
     # stack N consecutive time-steps in a new dimension
     list_u = []

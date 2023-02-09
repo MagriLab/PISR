@@ -15,14 +15,14 @@ def get_low_res_grid(high_res: T, factor: int = 3) -> T:
           Input shape must be (..., N, N).
 
     Parameters:
-    ===========
+    -----------
     high_res: np.ndarray | torch.Tensor
         High-resolution field to generate low-resolution field from.
     factor: int
         Odd factor by which to downsample the high-resolution field.
 
     Returns:
-    ========
+    --------
     low_res: np.ndarray | torch.Tensor
         Low-resolution field sampled from high-resolution field.
     """
