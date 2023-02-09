@@ -15,7 +15,7 @@ def get_config() -> ml_collections.ConfigDict:
     # simulation configuration
     config.simulation = ml_collections.ConfigDict()
 
-    config.simulation.nk = 30
+    config.simulation.nk = 35
     config.simulation.dt = 5e-3
     config.simulation.re = 42.0
     config.simulation.nu = 2
@@ -23,11 +23,13 @@ def get_config() -> ml_collections.ConfigDict:
     # experiment configuration
     config.experiment = ml_collections.ConfigDict()
 
+    config.experiment.nk = 35
     config.experiment.nx_lr = 10
+    config.experiment.nx_hr = 70
 
     config.experiment.sr_factor = ml_collections.ConfigDict()
-    config.experiment.sr_factor.downsample = 7
     config.experiment.sr_factor.upsample = 7
+    config.experiment.sr_factor.downsample = 7
 
     config.experiment.noise_std = 0.0
 

@@ -137,9 +137,6 @@ def initialise_model() -> nn.Module:
         Initialised model.
     """
 
-    if not FLAGS.config.experiment.sr_factor % 2 == 1:
-        raise ValueError('sr_factor must be odd for super-resolution.')
-
     # initialise model
     model = SRCNN(
         lr_nx=FLAGS.config.experiment.nx_lr,
@@ -304,12 +301,18 @@ def main(_):
     validation_loader = generate_dataloader(validation_u, config.training.batch_size, dataloader_kwargs, DEVICE_KWARGS)
 
     # define loss function -- disable constraints
-    loss_fn = KolmogorovLoss(nk=config.simulation.nk, re=config.simulation.re, dt=config.simulation.dt, fwt_lb=config.training.fwt_lb, device=DEVICE)
+    loss_fn = KolmogorovLoss(
+        nk=config.experiment.nk,
+        re=config.simulation.re,
+        dt=config.simulation.dt,
+        fwt_lb=config.training.fwt_lb,
+        device=DEVICE
+    )
 
     # initialise model / optimizer
     model = initialise_model()
     optimizer = torch.optim.Adam(model.parameters(), lr=config.training.lr, weight_decay=config.training.l2)
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=FLAGS.config.training.lr_gamma)
+    lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer=optimizer, factor=1.0)
 
     # generate training functions
     _loop_params = dict(model=model, loss_fn=loss_fn)
